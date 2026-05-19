@@ -36,6 +36,7 @@ export const api = {
   createBot: (data) => req("POST", "bots", data),
   updateBot: (id, data) => req("PATCH", `bots/${id}`, data),
   deleteBot: (id) => req("DELETE", `bots/${id}`),
+  uploadCode: (id, code) => req("PATCH", `bots/${id}`, { code }),
 
   adminStats: () => req("GET", "admin/stats"),
   adminUsers: () => req("GET", "admin/users"),
