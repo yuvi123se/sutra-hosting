@@ -37,6 +37,7 @@ db.exec(`
     user_id TEXT NOT NULL,
     name TEXT NOT NULL,
     token TEXT,
+    code TEXT,
     runtime TEXT DEFAULT 'nodejs',
     country TEXT DEFAULT 'india',
     status TEXT DEFAULT 'stopped',
@@ -58,6 +59,10 @@ db.exec(`
     created_at INTEGER DEFAULT (strftime('%s','now'))
   );
 `);
+
+
+// ─── DB Migration: add code column if missing ──────────────────────────────────
+try { db.exec("ALTER TABLE bots ADD COLUMN code TEXT"); } catch (_) {}
 
 // ─── Simple JWT (no external lib needed) ──────────────────────────────────────
 function b64url(str) {
@@ -229,7 +234,7 @@ app.get("/bots", requireAuth, (req, res) => {
 });
 
 app.post("/bots", requireAuth, (req, res) => {
-  const { name, token, runtime, country } = req.body;
+  const { name, token, code, runtime, country } = req.body;
   const user = db.prepare("SELECT * FROM users WHERE discord_id = ?").get(req.userId);
   const plan = PLANS[user.plan] || PLANS.free;
 
@@ -243,9 +248,9 @@ app.post("/bots", requireAuth, (req, res) => {
   const selectedCountry = plan.countries.includes(country) ? country : plan.defaultCountry;
   const botId = crypto.randomUUID();
   db.prepare(`
-    INSERT INTO bots (id, user_id, name, token, runtime, country, status, ram_mb, cpu_limit, plan)
-    VALUES (?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?)
-  `).run(botId, user.discord_id, name.trim(), token || null, runtime || "nodejs", selectedCountry, plan.ramMb, plan.cpuLimit, user.plan);
+    INSERT INTO bots (id, user_id, name, token, code, runtime, country, status, ram_mb, cpu_limit, plan)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?)
+  `).run(botId, user.discord_id, name.trim(), token || null, code || null, runtime || "nodejs", selectedCountry, plan.ramMb, plan.cpuLimit, user.plan);
 
   const bot = db.prepare("SELECT * FROM bots WHERE id = ?").get(botId);
   res.json(bot);
@@ -256,13 +261,14 @@ app.patch("/bots/:id", requireAuth, (req, res) => {
   const bot = db.prepare("SELECT * FROM bots WHERE id = ? AND user_id = ?").get(id, req.userId);
   if (!bot) return res.status(404).json({ error: "Bot not found" });
 
-  const { name, token, runtime, country, status } = req.body;
+  const { name, token, code, runtime, country, status } = req.body;
   const user = db.prepare("SELECT * FROM users WHERE discord_id = ?").get(req.userId);
   const plan = PLANS[user.plan] || PLANS.free;
 
   const updates = {};
   if (name) updates.name = name.trim();
   if (token !== undefined) updates.token = token;
+  if (code !== undefined) updates.code = code;
   if (runtime) updates.runtime = runtime;
   if (country && plan.countries.includes(country)) updates.country = country;
   if (status && ["running", "stopped", "restarting"].includes(status)) {
