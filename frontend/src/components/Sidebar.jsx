@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../App.jsx";
-import { api, getAvatarUrl } from "../api.js";
+import { api, getAvatarUrl, clearToken } from "../api.js";
 import { useToast } from "../Toast.jsx";
 
 const NAV = [
@@ -20,11 +20,10 @@ export default function Sidebar() {
   async function handleLogout() {
     try {
       await api.logout();
-      setUser(null);
-      navigate("/");
-    } catch {
-      toast("Logout failed", "error");
-    }
+    } catch {}
+    clearToken();
+    setUser(null);
+    navigate("/");
   }
 
   const avatarUrl = getAvatarUrl(user);
