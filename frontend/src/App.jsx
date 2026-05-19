@@ -1,250 +1,402 @@
+import React from "react";
+import { motion } from "framer-motion";
+import {
+  LayoutDashboard,
+  Bot,
+  CreditCard,
+  Server,
+  Activity,
+  Terminal,
+  Shield,
+  ChevronRight,
+} from "lucide-react";
+
 export default function SutraHosting() {
+  const [page, setPage] = React.useState("dashboard");
+  const [message, setMessage] = React.useState("Welcome back to Sutra Hosting.");
   const plans = [
     {
       name: "Starter",
       ram: "512MB RAM",
       price: "0.03 LTC",
-      features: ["1 Bot", "24/7 Uptime", "Basic Node"],
+      accent: "from-blue-500 to-cyan-400",
     },
     {
       name: "Creator",
       ram: "1GB RAM",
       price: "0.08 LTC",
-      features: ["5 Bots", "Fast CPU", "Priority Support"],
+      accent: "from-indigo-500 to-blue-500",
     },
     {
       name: "Infinity",
       ram: "4GB RAM",
       price: "0.18 LTC",
-      features: ["Unlimited Bots", "Dedicated Power", "Premium Nodes"],
+      accent: "from-violet-500 to-indigo-500",
     },
   ];
 
-  const bots = [
+  const deployments = [
     {
       name: "Bitsy",
-      status: "Online",
       runtime: "Node.js",
+      status: "Online",
+      cpu: "21%",
+      ram: "412MB",
     },
     {
       name: "Ocean AI",
-      status: "Sleeping",
       runtime: "Python",
+      status: "Sleeping",
+      cpu: "0%",
+      ram: "0MB",
     },
   ];
 
   return (
-    <div className="min-h-screen bg-[#060816] text-white overflow-hidden">
+    <div className="min-h-screen bg-[#050816] text-white overflow-hidden relative">
+      {/* Background */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(79,124,255,0.18),transparent_30%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(120,80,255,0.12),transparent_25%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(120,80,255,0.14),transparent_25%)]" />
+      <div className="absolute top-[-120px] right-[-80px] w-[380px] h-[380px] rounded-full bg-blue-500/20 blur-3xl" />
 
       <div className="relative z-10 flex min-h-screen">
         {/* Sidebar */}
-        <aside className="hidden lg:flex w-72 border-r border-white/5 bg-white/[0.03] backdrop-blur-xl flex-col justify-between p-6">
+        <aside className="hidden lg:flex w-[290px] border-r border-white/5 bg-white/[0.03] backdrop-blur-2xl flex-col justify-between p-6">
           <div>
-            <div className="flex items-center gap-3 mb-12">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xl font-bold shadow-2xl shadow-blue-500/30">
+            <div className="flex items-center gap-4 mb-14">
+              <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30 text-xl font-black">
                 S
               </div>
 
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">
+                <h1 className="text-2xl font-black tracking-tight">
                   Sutra Hosting
                 </h1>
                 <p className="text-sm text-white/40">
-                  by Sutra Development
+                  Premium Cloud Platform
                 </p>
               </div>
             </div>
 
             <nav className="space-y-3">
               {[
-                "Dashboard",
-                "Deployments",
-                "Billing",
-                "Nodes",
-                "Analytics",
+                {
+                  icon: LayoutDashboard,
+                  name: "dashboard",
+                  label: "Dashboard",
+                },
+                {
+                  icon: Bot,
+                  name: "deployments",
+                  label: "Deployments",
+                },
+                {
+                  icon: Server,
+                  name: "nodes",
+                  label: "Nodes",
+                },
+                {
+                  icon: Activity,
+                  name: "analytics",
+                  label: "Analytics",
+                },
+                {
+                  icon: CreditCard,
+                  name: "billing",
+                  label: "Billing",
+                },
               ].map((item) => (
                 <button
-                  key={item}
-                  className="w-full text-left px-5 py-4 rounded-2xl bg-white/[0.03] hover:bg-blue-500 transition-all duration-300 border border-white/5 hover:border-blue-400/30"
+                  key={item.name}
+                  onClick={() => {
+                    setPage(item.name);
+                    setMessage(`Opened ${item.label}`);
+                  }}
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all duration-300 group ${
+                    page === item.name
+                      ? "bg-blue-500 border-blue-400/30"
+                      : "border-white/5 bg-white/[0.03] hover:bg-blue-500 hover:border-blue-400/20"
+                  }`}
                 >
-                  {item}
+                  <item.icon className="w-5 h-5 text-white/80" />
+
+                  <span className="font-medium text-white/90">
+                    {item.label}
+                  </span>
                 </button>
               ))}
             </nav>
           </div>
 
-          <div className="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-5 backdrop-blur-xl">
-            <p className="text-sm text-white/50 mb-1">Cluster Status</p>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
-              <span className="font-semibold">All systems online</span>
+          <div className="rounded-[2rem] border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-6 backdrop-blur-xl">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-white/40 text-sm mb-1">
+                  Node Cluster
+                </p>
+
+                <h3 className="text-2xl font-bold">
+                  12 Active
+                </h3>
+              </div>
+
+              <div className="w-4 h-4 rounded-full bg-green-400 animate-pulse" />
             </div>
 
-            <button className="w-full py-3 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all font-semibold shadow-lg shadow-blue-500/30">
+            <button
+              onClick={() => setMessage("Console opened successfully.")}
+              className="w-full py-4 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-300 font-semibold shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2"
+            >
               Open Console
+              <Terminal className="w-4 h-4" />
             </button>
           </div>
         </aside>
 
         {/* Main */}
         <main className="flex-1 px-5 py-5 lg:p-8">
-          {/* Mobile Topbar */}
-          <div className="lg:hidden flex items-center justify-between mb-6">
+          <div className="mb-6 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-5 py-4 text-blue-200 backdrop-blur-xl">
+            {message}
+          </div>
+          {/* Mobile Header */}
+          <div className="lg:hidden flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-2xl font-bold">Sutra Hosting</h1>
-              <p className="text-white/40 text-sm">Cloud Dashboard</p>
+              <h1 className="text-3xl font-black">
+                Sutra Hosting
+              </h1>
+              <p className="text-white/40 text-sm">
+                Cloud Dashboard
+              </p>
             </div>
 
-            <button className="px-4 py-3 rounded-2xl bg-blue-500 font-semibold">
+            <button className="px-5 py-3 rounded-2xl bg-blue-500 font-semibold shadow-lg shadow-blue-500/30">
               Menu
             </button>
           </div>
 
           {/* Hero */}
-          <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#121a38] via-[#182347] to-[#10162f] p-8 lg:p-12 shadow-2xl shadow-black/40">
-            <div className="absolute right-[-120px] top-[-120px] w-[300px] h-[300px] rounded-full bg-blue-500/20 blur-3xl" />
+          <motion.section
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#121a38] via-[#182347] to-[#0f1429] p-8 lg:p-14 shadow-2xl shadow-black/40"
+          >
+            <div className="absolute right-[-120px] top-[-120px] w-[340px] h-[340px] rounded-full bg-blue-500/20 blur-3xl" />
 
-            <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div className="grid lg:grid-cols-2 gap-14 items-center">
               <div>
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-sm mb-6">
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                  PREMIUM CLOUD HOSTING
+                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-blue-400/20 bg-blue-500/10 text-blue-300 text-sm mb-7">
+                  <Shield className="w-4 h-4" />
+                  PREMIUM DISCORD HOSTING
                 </div>
 
-                <h2 className="text-5xl lg:text-6xl font-black leading-tight tracking-tight mb-6">
-                  Deploy Discord bots instantly.
+                <h2 className="text-5xl lg:text-7xl font-black leading-[0.95] tracking-tight mb-7">
+                  Deploy bots.
+                  <br />
+                  Scale instantly.
                 </h2>
 
-                <p className="text-lg text-white/60 leading-relaxed max-w-xl mb-8">
-                  Modern immersive hosting for Discord bots, APIs and AI apps.
-                  Built for speed, stability and clean deployment management.
+                <p className="text-lg text-white/60 leading-relaxed max-w-xl mb-9">
+                  High performance cloud hosting for Discord bots,
+                  APIs and AI services with immersive deployment
+                  management and Litecoin billing.
                 </p>
 
                 <div className="flex flex-wrap gap-4">
-                  <button className="px-7 py-4 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-300 font-semibold shadow-2xl shadow-blue-500/30 hover:scale-105">
+                  <button
+                    onClick={() => setMessage("Deployment wizard launched.")}
+                    className="px-7 py-4 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-300 font-semibold shadow-2xl shadow-blue-500/30 hover:scale-105 flex items-center gap-2"
+                  >
                     Deploy Bot
+                    <ChevronRight className="w-4 h-4" />
                   </button>
 
-                  <button className="px-7 py-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] transition-all duration-300 font-semibold">
+                  <button
+                    onClick={() => window.open("https://discord.com/login", "_blank")}
+                    className="px-7 py-4 rounded-2xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-all duration-300 font-semibold"
+                  >
                     Login with Discord
                   </button>
                 </div>
               </div>
 
-              <div className="relative">
-                <div className="rounded-[2rem] border border-white/10 bg-[#0c1124]/80 backdrop-blur-xl p-6 shadow-2xl shadow-black/40">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <p className="text-white/40 text-sm">Cluster Usage</p>
-                      <h3 className="text-3xl font-bold">87%</h3>
-                    </div>
-
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-2xl shadow-blue-500/40 flex items-center justify-center text-2xl font-black">
-                      12
-                    </div>
+              {/* Hero Card */}
+              <div className="rounded-[2rem] border border-white/10 bg-[#0c1124]/80 backdrop-blur-2xl p-7 shadow-2xl shadow-black/40">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <p className="text-white/40 text-sm mb-1">
+                      Live Usage
+                    </p>
+                    <h3 className="text-4xl font-black">
+                      87%
+                    </h3>
                   </div>
 
-                  <div className="space-y-5">
-                    {["CPU", "RAM", "Network"].map((metric, i) => (
-                      <div key={metric}>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-white/60">{metric}</span>
-                          <span>{[72, 81, 64][i]}%</span>
-                        </div>
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl font-black shadow-2xl shadow-blue-500/30">
+                    12
+                  </div>
+                </div>
 
-                        <div className="h-3 rounded-full bg-white/5 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
-                            style={{ width: `${[72, 81, 64][i]}%` }}
-                          />
-                        </div>
+                <div className="space-y-6">
+                  {[
+                    {
+                      label: "CPU",
+                      value: 72,
+                    },
+                    {
+                      label: "RAM",
+                      value: 84,
+                    },
+                    {
+                      label: "Network",
+                      value: 61,
+                    },
+                  ].map((metric) => (
+                    <div key={metric.label}>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-white/50">
+                          {metric.label}
+                        </span>
+                        <span>{metric.value}%</span>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
+                          style={{ width: `${metric.value}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
+          </motion.section>
+
+          {/* Stats */}
+          <section className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5 mt-10">
+            {[
+              ["Active Deployments", "42"],
+              ["Online Nodes", "12"],
+              ["API Latency", "19ms"],
+              ["Servers Protected", "100%"],
+            ].map((item) => (
+              <div
+                key={item[0]}
+                className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl"
+              >
+                <p className="text-white/40 mb-3">
+                  {item[0]}
+                </p>
+                <h3 className="text-4xl font-black tracking-tight">
+                  {item[1]}
+                </h3>
+              </div>
+            ))}
           </section>
 
           {/* Plans */}
-          <section className="mt-10">
-            <div className="flex items-center justify-between mb-6">
+          <section className="mt-12">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-7">
               <div>
-                <h3 className="text-3xl font-bold mb-1">Hosting Plans</h3>
+                <h3 className="text-4xl font-black mb-2">
+                  Hosting Plans
+                </h3>
                 <p className="text-white/40">
-                  Litecoin powered premium hosting.
+                  Premium Discord hosting powered by LTC.
                 </p>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
               {plans.map((plan) => (
-                <div
+                <motion.div
+                  whileHover={{ y: -8 }}
                   key={plan.name}
-                  className="group rounded-[2rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl p-7 hover:border-blue-400/30 hover:-translate-y-2 transition-all duration-300"
+                  className="rounded-[2rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl p-7 overflow-hidden relative"
                 >
-                  <div className="flex items-center justify-between mb-5">
-                    <div>
-                      <h4 className="text-2xl font-bold mb-1">
-                        {plan.name}
-                      </h4>
-                      <p className="text-white/40">{plan.ram}</p>
-                    </div>
+                  <div
+                    className={`absolute inset-0 opacity-10 bg-gradient-to-br ${plan.accent}`}
+                  />
 
-                    <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center text-xl">
-                      ⚡
-                    </div>
-                  </div>
-
-                  <div className="text-5xl font-black mb-6 tracking-tight">
-                    {plan.price}
-                  </div>
-
-                  <div className="space-y-3 mb-8">
-                    {plan.features.map((feature) => (
-                      <div
-                        key={feature}
-                        className="flex items-center gap-3 text-white/70"
-                      >
-                        <div className="w-2 h-2 rounded-full bg-blue-400" />
-                        {feature}
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h4 className="text-3xl font-black mb-1">
+                          {plan.name}
+                        </h4>
+                        <p className="text-white/40">
+                          {plan.ram}
+                        </p>
                       </div>
-                    ))}
-                  </div>
 
-                  <button className="w-full py-4 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-300 font-semibold shadow-xl shadow-blue-500/20 group-hover:shadow-blue-500/40">
-                    Buy with LTC
-                  </button>
-                </div>
+                      <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl">
+                        ⚡
+                      </div>
+                    </div>
+
+                    <div className="text-5xl font-black tracking-tight mb-8">
+                      {plan.price}
+                    </div>
+
+                    <div className="space-y-4 mb-8 text-white/70">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-blue-400" />
+                        24/7 Uptime
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-blue-400" />
+                        DDoS Protection
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-blue-400" />
+                        Global Nodes
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setMessage(`Selected ${plan.name} plan checkout.`)}
+                      className="w-full py-4 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-300 font-semibold shadow-xl shadow-blue-500/30"
+                    >
+                      Buy with LTC
+                    </button>
+                  </div>
+                </motion.div>
               ))}
             </div>
           </section>
 
-          {/* Bots */}
-          <section className="mt-10">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          {/* Deployments */}
+          <section className="mt-12">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-7">
               <div>
-                <h3 className="text-3xl font-bold mb-1">Deployments</h3>
+                <h3 className="text-4xl font-black mb-2">
+                  Deployments
+                </h3>
                 <p className="text-white/40">
-                  Manage active Discord bots.
+                  Manage running Discord applications.
                 </p>
               </div>
 
-              <button className="px-6 py-4 rounded-2xl bg-white/[0.04] border border-white/10 hover:bg-blue-500 transition-all duration-300 font-semibold">
+              <button
+                onClick={() => setMessage("New deployment modal opened.")}
+                className="px-6 py-4 rounded-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-300 font-semibold shadow-xl shadow-blue-500/30"
+              >
                 + New Deployment
               </button>
             </div>
 
             <div className="space-y-5">
-              {bots.map((bot) => (
-                <div
+              {deployments.map((bot) => (
+                <motion.div
+                  whileHover={{ y: -4 }}
                   key={bot.name}
-                  className="rounded-[2rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+                  className="rounded-[2rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-5"
                 >
                   <div className="flex items-center gap-5">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-2xl shadow-xl shadow-blue-500/30">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30 text-2xl">
                       🤖
                     </div>
 
@@ -253,11 +405,31 @@ export default function SutraHosting() {
                         {bot.name}
                       </h4>
 
-                      <p className="text-white/40">{bot.runtime}</p>
+                      <p className="text-white/40">
+                        {bot.runtime}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-5">
+                    <div>
+                      <p className="text-xs text-white/40 mb-1">
+                        CPU
+                      </p>
+                      <h5 className="font-bold">
+                        {bot.cpu}
+                      </h5>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-white/40 mb-1">
+                        RAM
+                      </p>
+                      <h5 className="font-bold">
+                        {bot.ram}
+                      </h5>
+                    </div>
+
                     <div
                       className={`px-5 py-3 rounded-2xl font-semibold border ${
                         bot.status === "Online"
@@ -268,15 +440,14 @@ export default function SutraHosting() {
                       {bot.status}
                     </div>
 
-                    <button className="px-5 py-3 rounded-2xl bg-white/[0.05] hover:bg-blue-500 transition-all duration-300 border border-white/10">
+                    <button
+                      onClick={() => setMessage(`${bot.name} restarted successfully.`)}
+                      className="px-5 py-3 rounded-2xl bg-white/[0.04] border border-white/10 hover:bg-blue-500 transition-all duration-300"
+                    >
                       Restart
                     </button>
-
-                    <button className="px-5 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500 transition-all duration-300 border border-red-400/20 text-red-300 hover:text-white">
-                      Stop
-                    </button>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </section>
