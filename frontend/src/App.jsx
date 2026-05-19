@@ -2,7 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from "react";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ToastProvider, useToast } from "./Toast.jsx";
-import { api, getAvatarUrl } from "./api.js";
+import { api, getAvatarUrl, getToken, setToken, clearToken } from "./api.js";
 import LoginPage from "./pages/Login.jsx";
 import DashboardPage from "./pages/Dashboard.jsx";
 import BotsPage from "./pages/Bots.jsx";
@@ -21,19 +21,37 @@ function AppInner() {
   const location = useLocation();
 
   useEffect(() => {
+    // Grab token from URL if redirected back from OAuth
+    const params = new URLSearchParams(location.search);
+    const tokenFromUrl = params.get("token");
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl);
+      // Clean token out of URL
+      navigate(location.pathname, { replace: true });
+    }
+
+    // Handle OAuth error
+    if (params.get("error")) {
+      navigate("/", { replace: true });
+      setLoading(false);
+      return;
+    }
+
+    // Load user if we have a token
+    const token = tokenFromUrl || getToken();
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
     api.me().then(({ user, isOwner }) => {
       setUser(user);
       setIsOwner(isOwner);
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
-
-  // Handle OAuth error in URL
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get("error")) {
-      navigate("/", { replace: true });
-    }
+    }).catch(() => {
+      clearToken(); // token invalid/expired
+      setLoading(false);
+    });
   }, []);
 
   if (loading) {
