@@ -1,27 +1,19 @@
-from pathlib import Path
-import json
-
-package = {
-    "name": "sutra-hosting",
-    "private": True,
-    "version": "1.0.0",
-    "scripts": {
-        "dev": "vite",
-        "build": "vite build"
-    },
-    "dependencies": {
-        "react": "^18.3.1",
-        "react-dom": "^18.3.1",
-        "framer-motion": "^11.3.30",
-        "lucide-react": "^0.441.0"
-    },
-    "devDependencies": {
-        "@vitejs/plugin-react": "^4.3.1",
-        "vite": "^5.4.2"
-    }
+{
+  "name": "sutra-hosting",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "framer-motion": "^11.3.30",
+    "lucide-react": "^0.441.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2"
+  }
 }
-
-path = Path("/mnt/data/package.json")
-path.write_text(json.dumps(package, indent=2))
-
-print(f"Saved {path}")
