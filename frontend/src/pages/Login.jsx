@@ -105,7 +105,7 @@ export default function LoginPage() {
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 20, boxShadow: "0 4px 20px rgba(88,101,242,0.5)"
           }}>⟁</div>
-          <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, letterSpacing: "-0.02em" }}>EnderCloud</span>
+          <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, letterSpacing: "-0.02em" }}>Sutra Hosting</span>
         </div>
         <a
           href="/auth/discord"
