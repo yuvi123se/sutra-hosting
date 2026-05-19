@@ -7,7 +7,7 @@ async function req(method, path, body) {
     headers: { "Content-Type": "application/json" }
   };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(BASE + path, opts);
+  const res = await fetch(`${BASE}/${path}`, opts);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
