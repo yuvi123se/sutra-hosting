@@ -1,4 +1,4 @@
-const BASE = "https://sutra-api-ldhf.onrender.com/";
+const BASE = "https://sutra-api-ldhf.onrender.com";
 
 async function req(method, path, body) {
   const opts = {
