@@ -355,11 +355,11 @@ app.patch("/admin/bots/:id/status", requireOwner, (req, res) => {
 
 // ─── Health Check ──────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
-  res.json({ name: "EnderCloud API", status: "online", version: "2.0.0" });
+  res.json({ name: "Sutra Hosting API", status: "online", version: "2.0.0" });
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 EnderCloud API running on http://localhost:${PORT}`);
+  console.log(`\n🚀 Sutra Hosting API running on http://localhost:${PORT}`);
   console.log(`👑 Owner ID: ${OWNER_ID}`);
   console.log(`📦 Database: ${path.join(__dirname, "endercloud.db")}\n`);
 });
