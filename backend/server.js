@@ -119,6 +119,7 @@ app.get("/auth/discord/callback", async (req, res) => {
     });
 
     const tokenData = await tokenRes.json();
+    console.log("Token response:", JSON.stringify(tokenData));
     if (!tokenData.access_token) throw new Error("No access token");
 
     // Fetch user from Discord
@@ -164,10 +165,10 @@ app.get("/auth/discord/callback", async (req, res) => {
     req.session.discordToken = tokenData.access_token;
 
     res.redirect(`${frontendUrl}/dashboard`);
-  } catch (err) {
-    console.error("OAuth error:", err);
-    res.redirect(`${frontendUrl}/?error=auth_failed`);
-  }
+} catch (err) {
+  console.error("OAuth error:", err.message, JSON.stringify(err));
+  res.redirect(`${frontendUrl}/?error=${encodeURIComponent(err.message)}`);
+}
 });
 
 app.post("/auth/logout", requireAuth, (req, res) => {
