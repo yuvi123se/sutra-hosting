@@ -40,7 +40,7 @@ function AppInner() {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 16 }}>
         <div style={{ width: 48, height: 48, border: "3px solid rgba(88,101,242,0.2)", borderTop: "3px solid #5865F2", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-        <p style={{ color: "#8892b0", fontSize: 14 }}>Loading EnderCloud...</p>
+        <p style={{ color: "#8892b0", fontSize: 14 }}>Loading Sutra Hosting...</p>
       </div>
     );
   }
