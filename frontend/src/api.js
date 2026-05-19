@@ -1,14 +1,27 @@
 const BASE = "https://sutra-api-ldhf.onrender.com";
 
+export function getToken() {
+  return localStorage.getItem("sutra_token");
+}
+
+export function setToken(token) {
+  localStorage.setItem("sutra_token", token);
+}
+
+export function clearToken() {
+  localStorage.removeItem("sutra_token");
+}
+
 async function req(method, path, body) {
+  const token = getToken();
   const opts = {
     method,
-    credentials: "include",
     headers: { "Content-Type": "application/json" }
   };
+  if (token) opts.headers["Authorization"] = `Bearer ${token}`;
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(`${BASE}/${path}`, opts);
-  if (res.status === 304 || res.status === 204) return {};
+  if (res.status === 204) return {};
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
