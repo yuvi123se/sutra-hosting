@@ -188,12 +188,15 @@ export default function BotsPage() {
   const [deletingId, setDeletingId] = useState(null);
   const [actionId, setActionId] = useState(null);
 
-  const userPlan = user?.plan || "free";
+  const [userPlan, setUserPlan] = useState(user?.plan || "free");
   const plan = plans[userPlan] || {};
 
   useEffect(() => {
-    Promise.all([api.bots(), api.plans()]).then(([b, p]) => {
-      setBots(b); setPlans(p); setLoading(false);
+    Promise.all([api.bots(), api.plans(), api.me()]).then(([b, p, me]) => {
+      setBots(b);
+      setPlans(p);
+      if (me?.user?.plan) setUserPlan(me.user.plan);
+      setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
