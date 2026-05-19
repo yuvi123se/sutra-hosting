@@ -121,7 +121,11 @@ app.get("/auth/discord/callback", async (req, res) => {
     const tokenData = await tokenRes.json();
     console.log("Token response:", JSON.stringify(tokenData));
     if (!tokenData.access_token) throw new Error("No access token");
-
+    console.log("Redirecting to:", `${frontendUrl}/dashboard`);
+req.session.user = user;
+req.session.discordToken = tokenData.access_token;
+res.redirect(`${frontendUrl}/dashboard`);
+    
     // Fetch user from Discord
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
