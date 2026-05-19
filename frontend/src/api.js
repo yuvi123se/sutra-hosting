@@ -8,6 +8,7 @@ async function req(method, path, body) {
   };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(`${BASE}/${path}`, opts);
+  if (res.status === 304 || res.status === 204) return {};
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
