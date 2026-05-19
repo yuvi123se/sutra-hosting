@@ -155,7 +155,7 @@ export default function LoginPage() {
           </h1>
 
           <p style={{ fontSize: "clamp(15px, 2vw, 18px)", color: "var(--text2)", maxWidth: 520, margin: "0 auto 40px", lineHeight: 1.7 }}>
-            EnderCloud gives you a reliable, fast home for your Discord bots — 
+            Sutra Hosting gives you a reliable, fast home for your Discord bots — 
             free tier included, no credit card required.
           </p>
 
@@ -246,7 +246,7 @@ export default function LoginPage() {
       </main>
 
       <footer style={{ position: "relative", zIndex: 2, textAlign: "center", padding: "40px", color: "var(--text3)", fontSize: 12 }}>
-        © 2025 EnderCloud · Made with ⟁
+        © 2025 Sutra Hosting · Made with ⟁
       </footer>
     </div>
   );
