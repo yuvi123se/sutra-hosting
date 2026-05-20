@@ -3,31 +3,9 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { setToken } from "../api.js";
 
 const API_BASE = "https://sutra-hosting.onrender.com";
-
-// Discord OAuth2 app credentials (public-safe: client secret NOT needed here)
 const DISCORD_CLIENT_ID = "1406977976066900099";
-// The redirect URI must exactly match what's registered in the Discord Developer Portal
 const DISCORD_REDIRECT_URI = "https://sutra-hosting.onrender.com/auth/discord/callback";
 
-/**
- * How this works (avoids Render's shared-IP 429 problem):
- *
- *  1. Discord redirects → backend /auth/discord/callback
- *  2. Backend immediately redirects → frontend /auth/callback?code=...
- *  3. THIS component runs in the USER'S browser:
- *       a. Calls Discord /oauth2/token directly  ← user's IP, never rate-limited
- *       b. Gets back a Discord access_token
- *       c. POSTs that token to backend /auth/discord/verify
- *       d. Backend fetches /users/@me, upserts user, returns JWT
- *
- * The client_secret is NOT required for the browser-side token exchange
- * when using PKCE — but Discord's standard code grant also works without it
- * if the application is set to "Public" (no secret required). If your app
- * requires the secret, keep it only on the backend and use the /verify route.
- *
- * If Discord rejects the browser exchange (confidential app), we fall back
- * to posting the raw code to /auth/discord/exchange-code on the backend.
- */
 export default function CallbackPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,38 +28,82 @@ export default function CallbackPage() {
 
   async function doLogin(code) {
     try {
-      // ── Step 1: Exchange code → Discord access_token from the BROWSER ──────
+      // Step 1: Exchange code → Discord access_token from the BROWSER
+      // Discord allows this from the browser for public OAuth apps (no secret needed).
+      // This uses the user's own IP so Render's shared IP rate limit is bypassed.
       setStatus("Exchanging token with Discord…");
-      const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: DISCORD_CLIENT_ID,
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: DISCORD_REDIRECT_URI,
-        }),
-      });
 
-      if (!tokenRes.ok) {
-        // Discord confidential app requires client_secret — fall back to backend
-        const text = await tokenRes.text();
-        console.warn("Browser token exchange failed, falling back to backend:", text);
-        await fallbackToBackend(code);
-        return;
+      let access_token = null;
+
+      try {
+        const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: DISCORD_CLIENT_ID,
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: DISCORD_REDIRECT_URI,
+          }),
+        });
+
+        const contentType = tokenRes.headers.get("content-type") || "";
+
+        if (tokenRes.status === 429) {
+          // Discord app-level rate limit — wait and retry once
+          const retryAfter = tokenRes.headers.get("retry-after");
+          const wait = retryAfter ? Math.ceil(parseFloat(retryAfter) * 1000) : 3000;
+          setStatus(`Rate limited — retrying in ${Math.ceil(wait / 1000)}s…`);
+          await new Promise(r => setTimeout(r, wait));
+
+          const retryRes = await fetch("https://discord.com/api/oauth2/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              client_id: DISCORD_CLIENT_ID,
+              grant_type: "authorization_code",
+              code,
+              redirect_uri: DISCORD_REDIRECT_URI,
+            }),
+          });
+
+          if (!retryRes.ok) {
+            const body = await retryRes.text();
+            throw new Error(`Discord rate limited (${retryRes.status}). Try again in a minute.`);
+          }
+
+          const retryData = await retryRes.json();
+          access_token = retryData.access_token;
+
+        } else if (!contentType.includes("application/json")) {
+          // Got HTML back — probably a rate limit or Discord error page
+          const body = await tokenRes.text();
+          throw new Error(`Discord returned unexpected response (${tokenRes.status}). Try again shortly.`);
+
+        } else {
+          const tokenData = await tokenRes.json();
+          if (!tokenRes.ok || !tokenData.access_token) {
+            throw new Error(tokenData.error_description || tokenData.error || "Token exchange failed");
+          }
+          access_token = tokenData.access_token;
+        }
+
+      } catch (fetchErr) {
+        // CORS or network error — browser can't reach Discord directly
+        // Fall back to backend exchange (may still work if not rate-limited there)
+        if (fetchErr.message.includes("rate limited") || fetchErr.message.includes("unexpected response")) {
+          throw fetchErr; // Don't bother with backend if Discord itself is rate-limiting
+        }
+        console.warn("Browser token exchange failed (likely CORS), trying backend:", fetchErr.message);
+        access_token = await exchangeViaBackend(code);
       }
 
-      const tokenData = await tokenRes.json();
-      if (!tokenData.access_token) {
-        throw new Error("No access_token in Discord response");
-      }
-
-      // ── Step 2: Send Discord access_token to backend → get our JWT ─────────
+      // Step 2: Send Discord access_token to our backend → get a JWT
       setStatus("Verifying with server…");
       const verifyRes = await fetch(`${API_BASE}/auth/discord/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: tokenData.access_token }),
+        body: JSON.stringify({ access_token }),
       });
 
       const verifyData = await verifyRes.json();
@@ -91,24 +113,30 @@ export default function CallbackPage() {
 
       setToken(verifyData.token);
       navigate("/dashboard", { replace: true });
+
     } catch (e) {
       console.error("Login error:", e);
       setError(e.message || "Login failed. Please try again.");
-      setTimeout(() => navigate("/", { replace: true }), 2500);
+      setTimeout(() => navigate("/", { replace: true }), 3000);
     }
   }
 
-  // Fallback: backend does the exchange (may 429 on shared IPs, but worth trying)
-  async function fallbackToBackend(code) {
+  // Backend fallback: send raw code, backend exchanges with Discord
+  async function exchangeViaBackend(code) {
     const res = await fetch(`${API_BASE}/auth/discord/exchange-code`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
     });
     const data = await res.json();
-    if (!res.ok || !data.token) throw new Error(data.error || "Auth failed");
-    setToken(data.token);
-    navigate("/dashboard", { replace: true });
+    if (!res.ok) throw new Error(data.error || "Backend auth failed");
+    // exchange-code now returns a jwt directly
+    if (data.token) {
+      setToken(data.token);
+      navigate("/dashboard", { replace: true });
+      throw new Error("__DONE__"); // Abort the rest of doLogin
+    }
+    throw new Error("No token from backend");
   }
 
   return (
@@ -119,7 +147,9 @@ export default function CallbackPage() {
       {error ? (
         <>
           <div style={{ fontSize: 36 }}>✕</div>
-          <p style={{ color: "#ED4245", fontSize: 15 }}>{error}</p>
+          <p style={{ color: "#ED4245", fontSize: 15, textAlign: "center", maxWidth: 400, padding: "0 24px" }}>
+            {error}
+          </p>
           <p style={{ color: "var(--text3)", fontSize: 13 }}>Redirecting to login…</p>
         </>
       ) : (
