@@ -18,6 +18,17 @@ const PORT = process.env.PORT || 3001;
 const OWNER_ID = process.env.OWNER_ID || "1304126568817229875";
 const JWT_SECRET = process.env.SESSION_SECRET || "sutra_secret_dev";
 
+// ─── Env Var Validation ───────────────────────────────────────────────────────
+const REQUIRED_ENV = ["DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DISCORD_REDIRECT_URI"];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length) {
+  console.error("❌ Missing required env vars:", missing.join(", "));
+  console.error("   Set these in your Render dashboard under Environment.");
+  process.exit(1);
+}
+console.log("✅ Discord Client ID:", process.env.DISCORD_CLIENT_ID);
+console.log("✅ Redirect URI:", process.env.DISCORD_REDIRECT_URI);
+
 // ─── Database Setup ───────────────────────────────────────────────────────────
 const DB_PATH = path.join(__dirname, "sutra-hosting.db");
 const db = new Database(DB_PATH);
@@ -360,12 +371,25 @@ app.get("/auth/discord/callback", async (req, res) => {
       })
     });
 
+    // Check content-type before calling .json() — Discord returns HTML on errors
+    const contentType = tokenRes.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const body = await tokenRes.text();
+      throw new Error(`Discord token endpoint returned non-JSON (${tokenRes.status}): ${body.slice(0, 300)}`);
+    }
+
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) throw new Error("No access token");
+    if (!tokenRes.ok || !tokenData.access_token) {
+      throw new Error(`Discord token error: ${JSON.stringify(tokenData)}`);
+    }
 
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
+    if (!userRes.ok) {
+      const body = await userRes.text();
+      throw new Error(`Discord user fetch failed (${userRes.status}): ${body.slice(0, 300)}`);
+    }
     const discordUser = await userRes.json();
 
     const existing = db.prepare("SELECT * FROM users WHERE discord_id = ?").get(discordUser.id);
