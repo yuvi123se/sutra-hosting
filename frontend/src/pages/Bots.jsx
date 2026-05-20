@@ -443,10 +443,11 @@ function LogsModal({ bot, onClose }) {
 }
 
 // ─── Bot Card ─────────────────────────────────────────────────────────────────
-function BotCard({ bot, onEdit, onDelete, onStart, onStop, onRestart, onLogs, actionLoading }) {
+function BotCard({ bot, onEdit, onDelete, onStart, onStop, onRestart, onLogs, onArchive, onUnarchive, actionLoading }) {
   const country = getCountry(bot.country);
   const runtime = bot.runtime || "nodejs";
   const isRunning = bot.status === "running";
+  const isArchived = !!bot.archived;
   const isBusy = actionLoading === bot.id;
 
   return (
@@ -456,31 +457,38 @@ function BotCard({ bot, onEdit, onDelete, onStart, onStop, onRestart, onLogs, ac
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       style={{
-        background: "var(--surface)",
-        border: `1px solid ${isRunning ? "rgba(87,242,135,0.2)" : "var(--border)"}`,
+        background: isArchived ? "rgba(255,255,255,0.02)" : "var(--surface)",
+        border: `1px solid ${isArchived ? "var(--border)" : isRunning ? "rgba(87,242,135,0.2)" : "var(--border)"}`,
         borderRadius: 20,
         padding: "20px 22px",
-        transition: "border-color 0.3s",
+        opacity: isArchived ? 0.7 : 1,
+        transition: "all 0.3s",
       }}
     >
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-          background: isRunning ? "rgba(87,242,135,0.1)" : "rgba(88,101,242,0.1)",
-          border: `1px solid ${isRunning ? "rgba(87,242,135,0.2)" : "rgba(88,101,242,0.15)"}`,
+          background: isArchived ? "rgba(136,146,176,0.1)" : isRunning ? "rgba(87,242,135,0.1)" : "rgba(88,101,242,0.1)",
+          border: `1px solid ${isArchived ? "rgba(136,146,176,0.15)" : isRunning ? "rgba(87,242,135,0.2)" : "rgba(88,101,242,0.15)"}`,
           display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22
-        }}>🤖</div>
+        }}>{isArchived ? "📦" : "🤖"}</div>
         <div style={{ flex: 1, overflow: "hidden" }}>
           <div style={{ fontWeight: 700, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bot.name}</div>
           <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
             {RUNTIMES.find(r => r.id === runtime)?.icon} {runtime} · {country.flag} {country.label}
           </div>
         </div>
-        <span className={`badge ${isRunning ? "badge-online" : "badge-offline"}`} style={{ flexShrink: 0 }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
-          {bot.status}
-        </span>
+        {isArchived ? (
+          <span className="badge" style={{ flexShrink: 0, background: "rgba(136,146,176,0.1)", color: "#8892b0", border: "1px solid rgba(136,146,176,0.2)" }}>
+            📦 archived
+          </span>
+        ) : (
+          <span className={`badge ${isRunning ? "badge-online" : "badge-offline"}`} style={{ flexShrink: 0 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+            {bot.status}
+          </span>
+        )}
       </div>
 
       {/* Stats row */}
@@ -509,48 +517,57 @@ function BotCard({ bot, onEdit, onDelete, onStart, onStop, onRestart, onLogs, ac
 
       {/* Action buttons */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {!isRunning ? (
-          <button
-            className="btn btn-success btn-sm"
-            onClick={() => onStart(bot.id)}
-            disabled={isBusy}
-            style={{ flex: 1, justifyContent: "center", minWidth: 72 }}
-          >
-            {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "▶ Start"}
-          </button>
-        ) : (
+        {isArchived ? (
           <>
             <button
-              className="btn btn-danger btn-sm"
-              onClick={() => onStop(bot.id)}
+              className="btn btn-sm"
+              onClick={() => onUnarchive(bot.id)}
               disabled={isBusy}
-              style={{ flex: 1, justifyContent: "center", minWidth: 72 }}
+              style={{ flex: 1, justifyContent: "center", background: "rgba(88,101,242,0.1)", border: "1px solid rgba(88,101,242,0.25)", color: "#a5b4fc" }}
             >
-              {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "■ Stop"}
+              {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "📤 Unarchive"}
             </button>
             <button
               className="btn btn-sm"
-              onClick={() => onRestart(bot.id)}
-              disabled={isBusy}
-              style={{ background: "rgba(254,231,92,0.1)", border: "1px solid rgba(254,231,92,0.2)", color: "#FEE75C", flex: 1, justifyContent: "center", minWidth: 72 }}
+              onClick={() => onDelete(bot.id)}
+              style={{ background: "rgba(237,66,69,0.08)", border: "1px solid rgba(237,66,69,0.2)", color: "var(--red)", justifyContent: "center" }}
             >
-              {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "↺ Restart"}
+              ✕ Delete
+            </button>
+          </>
+        ) : (
+          <>
+            {!isRunning ? (
+              <button className="btn btn-success btn-sm" onClick={() => onStart(bot.id)} disabled={isBusy} style={{ flex: 1, justifyContent: "center", minWidth: 72 }}>
+                {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "▶ Start"}
+              </button>
+            ) : (
+              <>
+                <button className="btn btn-danger btn-sm" onClick={() => onStop(bot.id)} disabled={isBusy} style={{ flex: 1, justifyContent: "center", minWidth: 72 }}>
+                  {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "■ Stop"}
+                </button>
+                <button className="btn btn-sm" onClick={() => onRestart(bot.id)} disabled={isBusy}
+                  style={{ background: "rgba(254,231,92,0.1)", border: "1px solid rgba(254,231,92,0.2)", color: "#FEE75C", flex: 1, justifyContent: "center", minWidth: 72 }}>
+                  {isBusy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : "↺ Restart"}
+                </button>
+              </>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={() => onLogs(bot)} style={{ flex: 1, justifyContent: "center", minWidth: 72 }}>
+              📋 Logs
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onEdit(bot)} style={{ justifyContent: "center" }}>
+              ✏ Edit
+            </button>
+            <button className="btn btn-sm" onClick={() => onArchive(bot.id)}
+              style={{ background: "rgba(136,146,176,0.08)", border: "1px solid rgba(136,146,176,0.2)", color: "#8892b0", justifyContent: "center" }}>
+              📦
+            </button>
+            <button className="btn btn-sm" onClick={() => onDelete(bot.id)}
+              style={{ background: "rgba(237,66,69,0.08)", border: "1px solid rgba(237,66,69,0.2)", color: "var(--red)", justifyContent: "center" }}>
+              ✕
             </button>
           </>
         )}
-        <button className="btn btn-ghost btn-sm" onClick={() => onLogs(bot)} style={{ flex: 1, justifyContent: "center", minWidth: 72 }}>
-          📋 Logs
-        </button>
-        <button className="btn btn-ghost btn-sm" onClick={() => onEdit(bot)} style={{ justifyContent: "center" }}>
-          ✏ Edit
-        </button>
-        <button
-          className="btn btn-sm"
-          onClick={() => onDelete(bot.id)}
-          style={{ background: "rgba(237,66,69,0.08)", border: "1px solid rgba(237,66,69,0.2)", color: "var(--red)", justifyContent: "center" }}
-        >
-          ✕
-        </button>
       </div>
     </motion.div>
   );
@@ -562,6 +579,7 @@ export default function BotsPage() {
   const toast = useToast();
   const [bots, setBots] = useState([]);
   const [plans, setPlans] = useState({});
+  const [userPlan, setUserPlan] = useState("free");
   const [loading, setLoading] = useState(true);
   const [showDeploy, setShowDeploy] = useState(false);
   const [editBot, setEditBot] = useState(null);
@@ -570,9 +588,10 @@ export default function BotsPage() {
 
   async function load() {
     try {
-      const [b, p] = await Promise.all([api.bots(), api.plans(), refreshUser()]);
+      const [b, p, me] = await Promise.all([api.bots(), api.plans(), api.me()]);
       setBots(b);
       setPlans(p);
+      setUserPlan(me.user?.plan || "free");
     } catch (e) {
       toast(e.message, "error");
     }
@@ -661,9 +680,35 @@ export default function BotsPage() {
     setActionLoading(null);
   }
 
-  const plan = plans[user?.plan] || plans.free || {};
-  const canAddMore = plan.maxBots === -1 || bots.length < (plan.maxBots || 1);
-  const runningCount = bots.filter(b => b.status === "running").length;
+  async function handleArchive(id) {
+    setActionLoading(id);
+    try {
+      const { bot } = await api.archiveBot(id);
+      setBots(prev => prev.map(b => b.id === id ? { ...b, ...bot } : b));
+      toast("Bot archived", "info");
+    } catch (e) {
+      toast(e.message, "error");
+    }
+    setActionLoading(null);
+  }
+
+  async function handleUnarchive(id) {
+    setActionLoading(id);
+    try {
+      const { bot } = await api.unarchiveBot(id);
+      setBots(prev => prev.map(b => b.id === id ? { ...b, ...bot } : b));
+      toast("Bot unarchived", "success");
+    } catch (e) {
+      toast(e.message, "error");
+    }
+    setActionLoading(null);
+  }
+
+  const plan = plans[userPlan] || plans.free || {};
+  const activeBots = bots.filter(b => !b.archived);
+  const archivedBots = bots.filter(b => b.archived);
+  const canAddMore = plan.maxBots === -1 || activeBots.length < (plan.maxBots || 1);
+  const runningCount = activeBots.filter(b => b.status === "running").length;
 
   return (
     <div className="main-content" style={{ position: "relative", zIndex: 1 }}>
@@ -673,11 +718,14 @@ export default function BotsPage() {
           <div>
             <h1 style={{ fontFamily: "Syne", fontSize: 28, fontWeight: 800 }}>My Bots</h1>
             <p style={{ color: "var(--text2)", fontSize: 14, marginTop: 2 }}>
-              {bots.length} bot{bots.length !== 1 ? "s" : ""} · {runningCount} running
+              {activeBots.length} active · {runningCount} running
               {plan.maxBots !== -1 && (
                 <span style={{ marginLeft: 8, color: "var(--text3)" }}>
-                  ({bots.length}/{plan.maxBots} slots used)
+                  ({activeBots.length}/{plan.maxBots} slots used)
                 </span>
+              )}
+              {archivedBots.length > 0 && (
+                <span style={{ marginLeft: 8, color: "var(--text3)" }}>· {archivedBots.length} archived</span>
               )}
             </p>
           </div>
@@ -713,21 +761,31 @@ export default function BotsPage() {
         </motion.div>
       ) : (
         <AnimatePresence mode="popLayout">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-            {bots.map(bot => (
-              <BotCard
-                key={bot.id}
-                bot={bot}
-                onEdit={setEditBot}
-                onDelete={handleDelete}
-                onStart={handleStart}
-                onStop={handleStop}
-                onRestart={handleRestart}
-                onLogs={setLogsBot}
-                actionLoading={actionLoading}
-              />
-            ))}
-          </div>
+          {activeBots.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16, marginBottom: archivedBots.length > 0 ? 32 : 0 }}>
+              {activeBots.map(bot => (
+                <BotCard key={bot.id} bot={bot} onEdit={setEditBot} onDelete={handleDelete}
+                  onStart={handleStart} onStop={handleStop} onRestart={handleRestart}
+                  onLogs={setLogsBot} onArchive={handleArchive} onUnarchive={handleUnarchive}
+                  actionLoading={actionLoading} />
+              ))}
+            </div>
+          )}
+          {archivedBots.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 12 }}>
+                📦 Archived ({archivedBots.length})
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
+                {archivedBots.map(bot => (
+                  <BotCard key={bot.id} bot={bot} onEdit={setEditBot} onDelete={handleDelete}
+                    onStart={handleStart} onStop={handleStop} onRestart={handleRestart}
+                    onLogs={setLogsBot} onArchive={handleArchive} onUnarchive={handleUnarchive}
+                    actionLoading={actionLoading} />
+                ))}
+              </div>
+            </div>
+          )}
         </AnimatePresence>
       )}
 
@@ -738,7 +796,7 @@ export default function BotsPage() {
             onClose={() => setShowDeploy(false)}
             onCreate={handleCreate}
             plans={plans}
-            userPlan={user?.plan || "free"}
+            userPlan={userPlan}
           />
         )}
         {editBot && (
@@ -747,7 +805,7 @@ export default function BotsPage() {
             onClose={() => setEditBot(null)}
             onSave={handleSave}
             plans={plans}
-            userPlan={user?.plan || "free"}
+            userPlan={userPlan}
           />
         )}
         {logsBot && (
