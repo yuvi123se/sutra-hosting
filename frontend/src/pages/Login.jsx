@@ -160,7 +160,7 @@ export default function LoginPage() {
           </p>
 
           <a
-            href="https://sutra-api-ldhf.onrender.com/auth/discord"
+            href="https://sutra-hosting.onrender.com/auth/discord"
             style={{
               display: "inline-flex", alignItems: "center", gap: 10,
               padding: "16px 36px", borderRadius: 16,
