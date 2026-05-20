@@ -1,8 +1,8 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { ToastProvider, useToast } from "./Toast.jsx";
-import { api, getAvatarUrl, getToken, setToken, clearToken } from "./api.js";
+import { AnimatePresence } from "framer-motion";
+import { ToastProvider } from "./Toast.jsx";
+import { api, getToken, setToken, clearToken } from "./api.js";
 import LoginPage from "./pages/Login.jsx";
 import DashboardPage from "./pages/Dashboard.jsx";
 import BotsPage from "./pages/Bots.jsx";
@@ -16,6 +16,7 @@ export const useAuth = () => useContext(AuthCtx);
 function AppInner() {
   const [user, setUser] = useState(null);
   const [isOwner, setIsOwner] = useState(false);
+  // Start as true so routes never render before we've resolved auth
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,16 +26,17 @@ function AppInner() {
     const tokenFromUrl = params.get("token");
     const hasError = params.get("error");
 
-    // Handle OAuth error
     if (hasError) {
       navigate("/", { replace: true });
       setLoading(false);
       return;
     }
 
-    // Store token if it came back in the URL from Discord OAuth
     if (tokenFromUrl) {
       setToken(tokenFromUrl);
+      // Remove the token from the URL immediately (cosmetic only — user is
+      // not set yet but loading=true means no route is rendered yet)
+      window.history.replaceState({}, "", location.pathname);
     }
 
     const token = tokenFromUrl || getToken();
@@ -44,22 +46,22 @@ function AppInner() {
       return;
     }
 
-    // Fetch the user FIRST, then clean the URL — this prevents the race
-    // condition where navigate() triggers a re-render before user is set,
-    // causing the protected route to redirect back to "/"
-    api.me().then(({ user, isOwner }) => {
-      setUser(user);
-      setIsOwner(isOwner);
-      setLoading(false);
-      // Only clean URL after user is confirmed — safe to navigate now
-      if (tokenFromUrl) {
-        navigate(location.pathname, { replace: true });
-      }
-    }).catch(() => {
-      clearToken();
-      setLoading(false);
-      navigate("/", { replace: true });
-    });
+    api.me()
+      .then(({ user, isOwner }) => {
+        setUser(user);
+        setIsOwner(isOwner);
+        // If we came from OAuth redirect, make sure we land on /dashboard
+        if (tokenFromUrl) {
+          navigate("/dashboard", { replace: true });
+        }
+      })
+      .catch(() => {
+        clearToken();
+        navigate("/", { replace: true });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
@@ -71,21 +73,20 @@ function AppInner() {
     );
   }
 
-  const isAuthPage = location.pathname === "/";
   const isLoggedIn = !!user;
 
   return (
     <AuthCtx.Provider value={{ user, setUser, isOwner }}>
       <div className="mesh-bg" />
-      {isLoggedIn && !isAuthPage && <Sidebar />}
+      {isLoggedIn && location.pathname !== "/" && <Sidebar />}
       <AnimatePresence mode="wait">
         <Routes>
-          <Route path="/" element={isLoggedIn ? <Navigate to="/dashboard" /> : <LoginPage />} />
-          <Route path="/dashboard" element={isLoggedIn ? <DashboardPage /> : <Navigate to="/" />} />
-          <Route path="/bots" element={isLoggedIn ? <BotsPage /> : <Navigate to="/" />} />
-          <Route path="/plans" element={isLoggedIn ? <PlansPage /> : <Navigate to="/" />} />
-          <Route path="/admin" element={isLoggedIn && isOwner ? <AdminPage /> : <Navigate to="/dashboard" />} />
-          <Route path="*" element={<Navigate to={isLoggedIn ? "/dashboard" : "/"} />} />
+          <Route path="/" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+          <Route path="/dashboard" element={isLoggedIn ? <DashboardPage /> : <Navigate to="/" replace />} />
+          <Route path="/bots" element={isLoggedIn ? <BotsPage /> : <Navigate to="/" replace />} />
+          <Route path="/plans" element={isLoggedIn ? <PlansPage /> : <Navigate to="/" replace />} />
+          <Route path="/admin" element={isLoggedIn && isOwner ? <AdminPage /> : <Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to={isLoggedIn ? "/dashboard" : "/"} replace />} />
         </Routes>
       </AnimatePresence>
     </AuthCtx.Provider>
