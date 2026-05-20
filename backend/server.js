@@ -129,7 +129,7 @@ app.use(express.json({ limit: "2mb" }));
 // ─── File Upload (multer) ──────────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max
+  limits: { fileSize: 2048 * 1024 * 1024 }, // 2 GB ceiling — per-plan limit enforced in route
   fileFilter: (req, file, cb) => {
     const ok = /\.(tar\.gz|tgz|zip)$/i.test(file.originalname) ||
                file.mimetype === "application/gzip" ||
@@ -162,10 +162,10 @@ function requireOwner(req, res, next) {
 
 // ─── Plan Config ───────────────────────────────────────────────────────────────
 const PLANS = {
-  free:    { name: "Free",    maxBots: 1,  ramMb: 256,  cpuLimit: 10,  countries: ["india"], defaultCountry: "india", uptimePercent: "95%",    price: "Free" },
-  starter: { name: "Starter", maxBots: 3,  ramMb: 512,  cpuLimit: 25,  countries: ["india","singapore","us-east","europe"], defaultCountry: "india", uptimePercent: "99%",    price: "₹149/mo" },
-  pro:     { name: "Pro",     maxBots: 10, ramMb: 1024, cpuLimit: 50,  countries: ["india","singapore","us-east","us-west","europe","japan"], defaultCountry: "india", uptimePercent: "99.9%",  price: "₹399/mo" },
-  ultra:   { name: "Ultra",   maxBots: -1, ramMb: 4096, cpuLimit: 100, countries: ["india","singapore","us-east","us-west","europe","japan","australia","brazil"], defaultCountry: "india", uptimePercent: "99.99%", price: "₹999/mo" }
+  free:    { name: "Free",    maxBots: 1,  ramMb: 256,  cpuLimit: 10,  maxUploadMb: 25,  countries: ["india"], defaultCountry: "india", uptimePercent: "95%",    price: "Free" },
+  starter: { name: "Starter", maxBots: 3,  ramMb: 512,  cpuLimit: 25,  maxUploadMb: 100, countries: ["india","singapore","us-east","europe"], defaultCountry: "india", uptimePercent: "99%",    price: "₹149/mo" },
+  pro:     { name: "Pro",     maxBots: 10, ramMb: 1024, cpuLimit: 50,  maxUploadMb: 500, countries: ["india","singapore","us-east","us-west","europe","japan"], defaultCountry: "india", uptimePercent: "99.9%",  price: "₹399/mo" },
+  ultra:   { name: "Ultra",   maxBots: -1, ramMb: 4096, cpuLimit: 100, maxUploadMb: 2048, countries: ["india","singapore","us-east","us-west","europe","japan","australia","brazil"], defaultCountry: "india", uptimePercent: "99.99%", price: "₹999/mo" }
 };
 
 // ─── Bot Runner ────────────────────────────────────────────────────────────────
@@ -806,6 +806,11 @@ app.post("/bots/upload", requireAuth, (req, res) => {
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.userId);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
     const plan = PLANS[user.plan] || PLANS.free;
+
+    // Enforce per-plan upload size limit
+    const maxBytes = plan.maxUploadMb * 1024 * 1024;
+    if (req.file.size > maxBytes)
+      return res.status(413).json({ error: `File too large. Your ${plan.name} plan allows up to ${plan.maxUploadMb} MB. Upgrade for a higher limit.` });
 
     const botCount = db.prepare("SELECT COUNT(*) as cnt FROM bots WHERE user_id = ?").get(user.id);
     if (plan.maxBots !== -1 && botCount.cnt >= plan.maxBots)
