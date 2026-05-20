@@ -123,7 +123,7 @@ function verifyJWT(token) {
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: true,  // JWT auth — safe to allow all origins
   credentials: true
 }));
 app.use(express.json({ limit: "2mb" }));
