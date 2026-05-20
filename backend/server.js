@@ -352,11 +352,65 @@ app.get("/auth/discord", (req, res) => {
   res.redirect(`https://discord.com/api/oauth2/authorize?${params}`);
 });
 
-app.get("/auth/discord/callback", async (req, res) => {
-  const { code } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+// ─── Helper: upsert Discord user and return JWT ───────────────────────────────
+async function upsertDiscordUser(accessToken, ip) {
+  const userRes = await fetch("https://discord.com/api/users/@me", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!userRes.ok) {
+    const body = await userRes.text();
+    throw new Error(`Discord user fetch failed (${userRes.status}): ${body.slice(0, 200)}`);
+  }
+  const discordUser = await userRes.json();
 
-  if (!code) return res.redirect(`${frontendUrl}/?error=no_code`);
+  const existing = db.prepare("SELECT * FROM users WHERE discord_id = ?").get(discordUser.id);
+  if (!existing) {
+    db.prepare(`
+      INSERT INTO users (id, discord_id, username, discriminator, avatar, email)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      crypto.randomUUID(),
+      discordUser.id,
+      discordUser.username,
+      discordUser.discriminator || "0",
+      discordUser.avatar,
+      discordUser.email || null
+    );
+  } else {
+    db.prepare(`
+      UPDATE users SET username=?, discriminator=?, avatar=?, email=?, updated_at=strftime('%s','now')
+      WHERE discord_id=?
+    `).run(
+      discordUser.username,
+      discordUser.discriminator || "0",
+      discordUser.avatar,
+      discordUser.email || null,
+      discordUser.id
+    );
+  }
+
+  db.prepare("INSERT INTO sessions_log (discord_id, action, ip) VALUES (?, 'login', ?)")
+    .run(discordUser.id, ip || "unknown");
+
+  return signJWT({ discord_id: discordUser.id });
+}
+
+// ─── OAuth callback: just bounce the code to the frontend ─────────────────────
+// The frontend exchanges the code with Discord directly (avoids Render IP rate limits)
+app.get("/auth/discord/callback", (req, res) => {
+  const { code, error } = req.query;
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  if (error || !code) return res.redirect(`${frontendUrl}/?error=${error || "no_code"}`);
+  // Pass code to frontend — it will exchange it and call /auth/discord/exchange
+  res.redirect(`${frontendUrl}/auth/callback?code=${encodeURIComponent(code)}`);
+});
+
+// ─── exchange-code: browser POSTs the Discord code here ──────────────────────
+// The browser calls this directly (user's own IP) — bypasses Render's shared IP
+// rate limit issue with Discord. Client secret stays on server, code stays safe.
+app.post("/auth/discord/exchange-code", async (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "Missing code" });
 
   try {
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
@@ -367,65 +421,25 @@ app.get("/auth/discord/callback", async (req, res) => {
         client_secret: process.env.DISCORD_CLIENT_SECRET,
         grant_type: "authorization_code",
         code,
-        redirect_uri: process.env.DISCORD_REDIRECT_URI
-      })
+        redirect_uri: process.env.DISCORD_REDIRECT_URI,
+      }),
     });
 
-    // Check content-type before calling .json() — Discord returns HTML on errors
     const contentType = tokenRes.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
       const body = await tokenRes.text();
-      throw new Error(`Discord token endpoint returned non-JSON (${tokenRes.status}): ${body.slice(0, 300)}`);
+      throw new Error(`Discord error (${tokenRes.status}): ${body.slice(0, 200)}`);
     }
-
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok || !tokenData.access_token) {
       throw new Error(`Discord token error: ${JSON.stringify(tokenData)}`);
     }
 
-    const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
-    });
-    if (!userRes.ok) {
-      const body = await userRes.text();
-      throw new Error(`Discord user fetch failed (${userRes.status}): ${body.slice(0, 300)}`);
-    }
-    const discordUser = await userRes.json();
-
-    const existing = db.prepare("SELECT * FROM users WHERE discord_id = ?").get(discordUser.id);
-    if (!existing) {
-      db.prepare(`
-        INSERT INTO users (id, discord_id, username, discriminator, avatar, email)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        crypto.randomUUID(),
-        discordUser.id,
-        discordUser.username,
-        discordUser.discriminator || "0",
-        discordUser.avatar,
-        discordUser.email || null
-      );
-    } else {
-      db.prepare(`
-        UPDATE users SET username=?, discriminator=?, avatar=?, email=?, updated_at=strftime('%s','now')
-        WHERE discord_id=?
-      `).run(
-        discordUser.username,
-        discordUser.discriminator || "0",
-        discordUser.avatar,
-        discordUser.email || null,
-        discordUser.id
-      );
-    }
-
-    db.prepare("INSERT INTO sessions_log (discord_id, action, ip) VALUES (?, 'login', ?)")
-      .run(discordUser.id, req.ip);
-
-    const jwt = signJWT({ discord_id: discordUser.id });
-    res.redirect(`${frontendUrl}/dashboard?token=${jwt}`);
+    const jwt = await upsertDiscordUser(tokenData.access_token, req.ip);
+    res.json({ token: jwt });
   } catch (err) {
-    console.error("OAuth error:", err);
-    res.redirect(`${frontendUrl}/?error=auth_failed`);
+    console.error("exchange-code error:", err.message);
+    res.status(401).json({ error: err.message || "Auth failed" });
   }
 });
 
