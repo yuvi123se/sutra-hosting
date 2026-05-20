@@ -124,6 +124,7 @@ export default function PlansPage() {
                       { k: "Bots", v: plan.maxBots === -1 ? "Unlimited" : plan.maxBots },
                       { k: "RAM", v: `${plan.ramMb}MB` },
                       { k: "CPU", v: `${plan.cpuLimit}%` },
+                      { k: "Upload Limit", v: plan.maxUploadMb >= 1024 ? `${plan.maxUploadMb / 1024} GB` : `${plan.maxUploadMb} MB` },
                       { k: "Uptime SLA", v: plan.uptimePercent },
                       { k: "Regions", v: allowedCountries.length },
                     ].map(f => (
