@@ -66,14 +66,17 @@ client.run(os.environ['TOKEN'])`,
       if (tab === "token") payload.code = "";
       if (tab === "code") payload.token = "";
       if (tab === "files") {
-        // Read all files and combine into code payload
-        const fileContents = await Promise.all(files.map(f => new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(`// === ${f.name} ===\n${e.target.result}`);
-          reader.onerror = reject;
-          reader.readAsText(f);
-        })));
-        payload.code = fileContents.join("\n\n");
+        if (files.length === 0) return;
+        const file = files[0]; // single archive
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("name", form.name.trim());
+        if (form.token) formData.append("token", form.token);
+        formData.append("runtime", form.runtime);
+        formData.append("country", form.country);
+        await onCreate(formData);
+        onClose();
+        return;
       }
       await onCreate(payload);
       onClose();
@@ -150,11 +153,8 @@ client.run(os.environ['TOKEN'])`,
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => {
                   e.preventDefault();
-                  const dropped = Array.from(e.dataTransfer.files);
-                  setFiles(prev => {
-                    const names = new Set(prev.map(f => f.name));
-                    return [...prev, ...dropped.filter(f => !names.has(f.name))];
-                  });
+                  const dropped = Array.from(e.dataTransfer.files).slice(0, 1);
+                  setFiles(dropped);
                 }}
                 style={{
                   border: "2px dashed rgba(88,101,242,0.4)",
@@ -169,20 +169,17 @@ client.run(os.environ['TOKEN'])`,
                 onMouseLeave={e => e.currentTarget.style.background = "rgba(88,101,242,0.04)"}
               >
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text1)" }}>Drop files here or click to browse</div>
-                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>Select multiple .js, .py, .ts, .json files etc.</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text1)" }}>Drop your archive here or click to browse</div>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>Accepts .tar.gz, .tgz, or .zip — your bot project bundled up</div>
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                multiple
+                accept=".tar.gz,.tgz,.zip,application/gzip,application/x-tar,application/zip"
                 style={{ display: "none" }}
                 onChange={e => {
-                  const selected = Array.from(e.target.files);
-                  setFiles(prev => {
-                    const names = new Set(prev.map(f => f.name));
-                    return [...prev, ...selected.filter(f => !names.has(f.name))];
-                  });
+                  const selected = Array.from(e.target.files).slice(0, 1); // one archive only
+                  setFiles(selected);
                   e.target.value = "";
                 }}
               />
@@ -209,7 +206,7 @@ client.run(os.environ['TOKEN'])`,
                 </div>
               )}
               <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>
-                All files are bundled together and deployed as a single bot project.
+                Source files are extracted from the archive and deployed as a single bot project. node_modules and .git are ignored.
               </p>
             </div>
           ) : (
