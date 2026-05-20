@@ -14,10 +14,11 @@ function DeployModal({ onClose, onCreate, plans, userPlan }) {
   });
   const [files, setFiles] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
   const fileInputRef = React.useRef(null);
   const allowedCountries = plan.countries || ["india"];
 
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); setError(""); }
 
   const PLACEHOLDERS = {
     nodejs: `const { Client, GatewayIntentBits } = require('discord.js');
@@ -57,17 +58,17 @@ client.run(os.environ['TOKEN'])`,
   };
 
   async function submit() {
-    if (!form.name.trim()) return;
-    if (tab === "code" && !form.code.trim()) return;
-    if (tab === "files" && files.length === 0) return;
+    setError("");
+    if (!form.name.trim()) { setError("Bot name is required."); return; }
+    if (tab === "code" && !form.code.trim()) { setError("Paste your bot code or switch to a different tab."); return; }
+    if (tab === "files" && files.length === 0) { setError("Please select an archive file."); return; }
     setLoading(true);
     try {
       const payload = { ...form };
       if (tab === "token") payload.code = "";
       if (tab === "code") payload.token = "";
       if (tab === "files") {
-        if (files.length === 0) return;
-        const file = files[0]; // single archive
+        const file = files[0];
         const formData = new FormData();
         formData.append("file", file);
         formData.append("name", form.name.trim());
@@ -75,12 +76,15 @@ client.run(os.environ['TOKEN'])`,
         formData.append("runtime", form.runtime);
         formData.append("country", form.country);
         await onCreate(formData);
+        setLoading(false);
         onClose();
         return;
       }
       await onCreate(payload);
+      setLoading(false);
       onClose();
     } catch (e) {
+      setError(e.message || "Deploy failed. Check the bot name and try again.");
       setLoading(false);
     }
   }
@@ -235,13 +239,19 @@ client.run(os.environ['TOKEN'])`,
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+        {error && (
+          <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(237,66,69,0.12)", border: "1px solid rgba(237,66,69,0.3)", color: "#f87171", fontSize: 13 }}>
+            ⚠ {error}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
           <button
             className="btn btn-primary"
             style={{ flex: 2, justifyContent: "center" }}
             onClick={submit}
-            disabled={loading || !form.name.trim() || (tab === "code" && !form.code.trim()) || (tab === "files" && files.length === 0)}
+            disabled={loading}
           >
             {loading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "🚀 Deploy Bot"}
           </button>
