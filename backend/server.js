@@ -195,15 +195,28 @@ function appendLog(botId, line, stream = "stdout") {
   } catch (_) {}
 }
 
-// Detect which npm packages the bot code actually requires
-function detectRequiredPackages(code) {
+// ─── Per-runtime dependency helpers ───────────────────────────────────────────
+
+// Spawn a child process and wait for it to finish; returns error string or null
+function runInstall(cmd, args, cwd, botId, label) {
+  return new Promise((resolve) => {
+    appendLog(botId, `[sutra] ${label}`, "system");
+    const proc = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    proc.stdout.on("data", d => appendLog(botId, d.toString().trimEnd(), "system"));
+    proc.stderr.on("data", d => appendLog(botId, d.toString().trimEnd(), "system"));
+    proc.on("close", code => resolve(code === 0 ? null : `${label} exited with code ${code}`));
+    proc.on("error", err => resolve(`${cmd} not found: ${err.message}. Is it installed on the server?`));
+  });
+}
+
+// ── Node.js ──────────────────────────────────────────────────────────────────
+function detectNodePackages(code) {
   const matches = [...code.matchAll(/require\(\s*['"]([^./\s'"@][^'"]*)['"]\s*\)/g)];
   const importMatches = [...code.matchAll(/^import\s+.*?\s+from\s+['"]([^./\s'"@][^'"]*)['"]/gm)];
   const all = new Set([
     ...matches.map(m => m[1].split("/")[0]),
     ...importMatches.map(m => m[1].split("/")[0]),
   ]);
-  // Strip known Node.js built-ins
   const builtins = new Set([
     "fs","path","os","http","https","crypto","events","stream","util",
     "child_process","buffer","url","net","tls","dns","readline","assert",
@@ -213,62 +226,129 @@ function detectRequiredPackages(code) {
   return [...all].filter(p => !builtins.has(p));
 }
 
-// Install npm deps into the bot's temp dir, returns error string or null
-async function installDeps(botDir, packages) {
+async function installNodeDeps(botId, botDir, packages) {
   if (!packages.length) return null;
-  return new Promise((resolve) => {
-    const pkgJson = {
-      name: "sutra-bot",
-      version: "1.0.0",
-      type: "commonjs",
-      dependencies: Object.fromEntries(packages.map(p => [p, "latest"])),
-    };
-    fs.writeFileSync(path.join(botDir, "package.json"), JSON.stringify(pkgJson, null, 2));
-
-    appendLog("_install_", `[sutra] Installing: ${packages.join(", ")}`, "system");
-    const npm = spawn("npm", ["install", "--prefer-offline", "--no-audit", "--no-fund", "--loglevel=error"], {
-      cwd: botDir,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stderr = "";
-    npm.stderr.on("data", d => { stderr += d.toString(); });
-    npm.on("close", code => {
-      resolve(code === 0 ? null : `npm install failed: ${stderr.slice(0, 500)}`);
-    });
-    npm.on("error", err => resolve(`npm spawn error: ${err.message}`));
-  });
+  const pkgJson = {
+    name: "sutra-bot", version: "1.0.0", type: "commonjs",
+    dependencies: Object.fromEntries(packages.map(p => [p, "latest"])),
+  };
+  fs.writeFileSync(path.join(botDir, "package.json"), JSON.stringify(pkgJson, null, 2));
+  return runInstall(
+    "npm", ["install", "--prefer-offline", "--no-audit", "--no-fund", "--loglevel=error"],
+    botDir, botId, `npm install: ${packages.join(", ")}`
+  );
 }
 
-async function spawnBotProcess(bot, botDir, restartCount = 0) {
-  const { cmd, ext, args = [] } = getRuntimeCmd(bot.runtime);
-  const codeFile = path.join(botDir, `bot${ext}`);
+// ── Python ───────────────────────────────────────────────────────────────────
+function detectPythonPackages(code) {
+  const matches = [
+    ...code.matchAll(/^import\s+([\w]+)/gm),
+    ...code.matchAll(/^from\s+([\w]+)\s+import/gm),
+  ];
+  const stdlib = new Set([
+    "os","sys","re","math","json","time","datetime","random","hashlib",
+    "pathlib","typing","io","abc","copy","enum","functools","itertools",
+    "collections","threading","subprocess","socket","logging","unittest",
+    "urllib","http","email","html","xml","csv","sqlite3","struct","base64",
+    "contextlib","dataclasses","inspect","traceback","warnings","weakref",
+    "gc","platform","signal","shutil","tempfile","glob","fnmatch","stat",
+    "queue","asyncio","concurrent","multiprocessing","string","textwrap",
+    "pprint","codecs","binascii","zlib","gzip","bz2","lzma","zipfile",
+    "tarfile","configparser","argparse","getpass","getopt","locale",
+  ]);
+  // Common package name remaps (import name → pip name)
+  const remaps = {
+    discord: "discord.py",
+    dotenv: "python-dotenv",
+    cv2: "opencv-python",
+    PIL: "Pillow",
+    bs4: "beautifulsoup4",
+    sklearn: "scikit-learn",
+    yaml: "PyYAML",
+    Crypto: "pycryptodome",
+    flask: "Flask",
+    fastapi: "fastapi",
+    uvicorn: "uvicorn",
+    aiohttp: "aiohttp",
+    requests: "requests",
+    numpy: "numpy",
+    pandas: "pandas",
+  };
+  const found = new Set();
+  for (const m of matches) {
+    const name = m[1];
+    if (!stdlib.has(name)) {
+      found.add(remaps[name] || name);
+    }
+  }
+  return [...found];
+}
+
+async function installPythonDeps(botId, botDir, packages) {
+  if (!packages.length) return null;
+  // Write requirements.txt
+  fs.writeFileSync(path.join(botDir, "requirements.txt"), packages.join("\n") + "\n");
+  return runInstall(
+    "pip3", ["install", "--quiet", "--disable-pip-version-check", "-r", "requirements.txt"],
+    botDir, botId, `pip install: ${packages.join(", ")}`
+  );
+}
+
+// ── Go ───────────────────────────────────────────────────────────────────────
+function detectGoModules(code) {
+  const matches = [...code.matchAll(/^import\s*\(\s*([\s\S]*?)\s*\)/gm),
+                   ...code.matchAll(/^import\s+"([^"]+)"/gm)];
+  const stdlib = new Set([
+    "fmt","os","io","log","net","http","strings","strconv","time","math",
+    "sort","sync","bytes","bufio","errors","context","path","reflect",
+    "runtime","unicode","encoding","crypto","compress","archive","database",
+    "testing","flag","regexp","html","text","image","mime","hash",
+  ]);
+  const found = new Set();
+  for (const m of matches) {
+    const block = m[1] || m[1];
+    const paths = [...(block || "").matchAll(/"([^"]+)"/g)].map(x => x[1]);
+    for (const p of paths) {
+      const top = p.split("/")[0];
+      if (!stdlib.has(top) && p.includes(".")) found.add(p); // only external (has domain)
+    }
+  }
+  return [...found];
+}
+
+async function setupGoModule(botId, botDir, modulePaths) {
+  // Init go module
+  const initErr = await runInstall("go", ["mod", "init", "sutrabot"], botDir, botId, "go mod init");
+  if (initErr) return initErr;
+  if (!modulePaths.length) return null;
+  return runInstall("go", ["mod", "tidy"], botDir, botId, "go mod tidy");
+}
+
+// ── Java ─────────────────────────────────────────────────────────────────────
+function detectJavaDeps(code) {
+  // Maven-style: look for commented hints like // maven: com.group:artifact:version
+  const matches = [...code.matchAll(/\/\/\s*maven:\s*(\S+)/g)];
+  return matches.map(m => m[1]);
+}
+
+async function buildMavenPom(botId, botDir, deps) {
+  if (!deps.length) return null;
+  const depXml = deps.map(d => {
+    const [g, a, v = "LATEST"] = d.split(":");
+    return `    <dependency>\n      <groupId>${g}</groupId>\n      <artifactId>${a}</artifactId>\n      <version>${v}</version>\n    </dependency>`;
+  }).join("\n");
+  const pom = `<?xml version="1.0"?>\n<project>\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>sutra</groupId>\n  <artifactId>bot</artifactId>\n  <version>1.0</version>\n  <dependencies>\n${depXml}\n  </dependencies>\n</project>\n`;
+  fs.writeFileSync(path.join(botDir, "pom.xml"), pom);
+  return runInstall("mvn", ["dependency:resolve", "-q"], botDir, botId, `mvn resolve: ${deps.join(", ")}`);
+}
+
+// ─── spawnBotProcess ──────────────────────────────────────────────────────────
+async function spawnBotProcess(bot, botDir) {
+  const runtime = bot.runtime || "nodejs";
+  const { cmd, ext, args = [] } = getRuntimeCmd(runtime);
   const code = bot.code || `console.log('Bot ${bot.name} started (token-only mode)');`;
+  const codeFile = path.join(botDir, `bot${ext}`);
   fs.writeFileSync(codeFile, code, "utf8");
-
-  // Install dependencies for Node.js bots
-  if (bot.runtime === "nodejs" || !bot.runtime) {
-    const packages = detectRequiredPackages(code);
-    if (packages.length) {
-      appendLog(bot.id, `[sutra] Detected packages: ${packages.join(", ")}`, "system");
-      const err = await installDeps(botDir, packages);
-      if (err) {
-        appendLog(bot.id, `[sutra] Dependency install failed: ${err}`, "stderr");
-        return { ok: false, error: err };
-      }
-      appendLog(bot.id, `[sutra] Dependencies installed successfully`, "system");
-    }
-  }
-
-  // Java compile step
-  if (bot.runtime === "java") {
-    try {
-      const { execSync } = await import("child_process");
-      execSync(`javac "${codeFile}"`, { cwd: botDir });
-    } catch (e) {
-      return { ok: false, error: `Java compile error: ${e.message}` };
-    }
-  }
 
   const botEnv = {
     ...process.env,
@@ -277,29 +357,100 @@ async function spawnBotProcess(bot, botDir, restartCount = 0) {
     BOT_NAME: bot.name,
   };
 
-  let spawnArgs;
-  if (bot.runtime === "java") {
+  // ── Node.js ────────────────────────────────────────────────────────────────
+  if (runtime === "nodejs") {
+    const packages = detectNodePackages(code);
+    if (packages.length) {
+      appendLog(bot.id, `[sutra] Detected npm packages: ${packages.join(", ")}`, "system");
+      const err = await installNodeDeps(bot.id, botDir, packages);
+      if (err) { appendLog(bot.id, `[sutra] npm install failed: ${err}`, "stderr"); return { ok: false, error: err }; }
+      appendLog(bot.id, "[sutra] npm install complete", "system");
+    }
+    const spawnArgs = [...args, codeFile];
+    let proc;
+    try { proc = spawn(cmd, spawnArgs, { cwd: botDir, env: botEnv, stdio: ["ignore", "pipe", "pipe"], detached: false }); }
+    catch (e) { return { ok: false, error: `Failed to spawn node: ${e.message}` }; }
+    return { ok: true, proc };
+  }
+
+  // ── Python ─────────────────────────────────────────────────────────────────
+  if (runtime === "python") {
+    // Check python3 exists
+    try { execSync("python3 --version", { stdio: "ignore" }); }
+    catch { return { ok: false, error: "python3 is not installed on this server" }; }
+
+    const packages = detectPythonPackages(code);
+    if (packages.length) {
+      appendLog(bot.id, `[sutra] Detected pip packages: ${packages.join(", ")}`, "system");
+      // Use a venv so installs are isolated
+      const venvDir = path.join(botDir, ".venv");
+      const venvErr = await runInstall("python3", ["-m", "venv", venvDir], botDir, bot.id, "Creating venv...");
+      if (venvErr) { appendLog(bot.id, `[sutra] venv creation failed: ${venvErr}`, "stderr"); return { ok: false, error: venvErr }; }
+      const pipBin = path.join(venvDir, "bin", "pip");
+      const pipErr = await runInstall(
+        pipBin, ["install", "--quiet", "--disable-pip-version-check", ...packages],
+        botDir, bot.id, `pip install: ${packages.join(", ")}`
+      );
+      if (pipErr) { appendLog(bot.id, `[sutra] pip install failed: ${pipErr}`, "stderr"); return { ok: false, error: pipErr }; }
+      appendLog(bot.id, "[sutra] pip install complete", "system");
+      // Run with venv python
+      const pythonBin = path.join(venvDir, "bin", "python");
+      let proc;
+      try { proc = spawn(pythonBin, [codeFile], { cwd: botDir, env: botEnv, stdio: ["ignore", "pipe", "pipe"], detached: false }); }
+      catch (e) { return { ok: false, error: `Failed to spawn python: ${e.message}` }; }
+      return { ok: true, proc };
+    }
+
+    let proc;
+    try { proc = spawn("python3", [codeFile], { cwd: botDir, env: botEnv, stdio: ["ignore", "pipe", "pipe"], detached: false }); }
+    catch (e) { return { ok: false, error: `Failed to spawn python3: ${e.message}` }; }
+    return { ok: true, proc };
+  }
+
+  // ── Go ─────────────────────────────────────────────────────────────────────
+  if (runtime === "go") {
+    try { execSync("go version", { stdio: "ignore" }); }
+    catch { return { ok: false, error: "Go is not installed on this server" }; }
+
+    const modules = detectGoModules(code);
+    const modErr = await setupGoModule(bot.id, botDir, modules);
+    if (modErr) { appendLog(bot.id, `[sutra] go mod failed: ${modErr}`, "stderr"); return { ok: false, error: modErr }; }
+
+    let proc;
+    try { proc = spawn("go", ["run", codeFile], { cwd: botDir, env: { ...botEnv, HOME: os.homedir(), GOPATH: path.join(botDir, ".gopath") }, stdio: ["ignore", "pipe", "pipe"], detached: false }); }
+    catch (e) { return { ok: false, error: `Failed to spawn go: ${e.message}` }; }
+    return { ok: true, proc };
+  }
+
+  // ── Java ───────────────────────────────────────────────────────────────────
+  if (runtime === "java") {
+    try { execSync("java -version", { stdio: "ignore" }); }
+    catch { return { ok: false, error: "Java (JDK) is not installed on this server" }; }
+    try { execSync("javac -version", { stdio: "ignore" }); }
+    catch { return { ok: false, error: "javac not found — a full JDK (not just JRE) is required" }; }
+
+    const deps = detectJavaDeps(code);
+    if (deps.length) {
+      const mvnErr = await buildMavenPom(bot.id, botDir, deps);
+      if (mvnErr) { appendLog(bot.id, `[sutra] Maven resolve failed: ${mvnErr}`, "stderr"); return { ok: false, error: mvnErr }; }
+    }
+
+    // Compile
+    appendLog(bot.id, "[sutra] Compiling Java...", "system");
+    try { execSync(`javac "${codeFile}"`, { cwd: botDir }); }
+    catch (e) { return { ok: false, error: `Java compile error: ${e.stderr?.toString() || e.message}` }; }
+    appendLog(bot.id, "[sutra] Compilation successful", "system");
+
     const className = path.basename(codeFile, ".java");
-    spawnArgs = ["-cp", botDir, className];
-  } else if (bot.runtime === "go") {
-    spawnArgs = [...args, codeFile];
-  } else {
-    spawnArgs = [...args, codeFile];
+    const cpParts = [botDir];
+    if (deps.length) cpParts.push(path.join(botDir, "target", "dependency", "*"));
+    let proc;
+    try { proc = spawn("java", ["-cp", cpParts.join(":"), className], { cwd: botDir, env: botEnv, stdio: ["ignore", "pipe", "pipe"], detached: false }); }
+    catch (e) { return { ok: false, error: `Failed to spawn java: ${e.message}` }; }
+    return { ok: true, proc };
   }
 
-  let proc;
-  try {
-    proc = spawn(cmd, spawnArgs, {
-      cwd: botDir,
-      env: botEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: false,
-    });
-  } catch (e) {
-    return { ok: false, error: `Failed to spawn process: ${e.message}` };
-  }
-
-  return { ok: true, proc };
+  return { ok: false, error: `Unknown runtime: ${runtime}` };
 }
 
 async function startBotProcess(bot) {
