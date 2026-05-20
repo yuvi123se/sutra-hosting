@@ -155,6 +155,9 @@ const PLANS = {
 };
 
 // ─── Bot Runner ────────────────────────────────────────────────────────────────
+const MAX_RESTARTS = 5;
+const RESTART_BACKOFF_MS = [2000, 5000, 10000, 30000, 60000];
+
 function getRuntimeCmd(runtime) {
   switch (runtime) {
     case "python": return { cmd: "python3", ext: ".py" };
@@ -166,7 +169,7 @@ function getRuntimeCmd(runtime) {
 }
 
 function appendLog(botId, line, stream = "stdout") {
-  const trimmed = line.slice(0, 2000);
+  const trimmed = String(line).slice(0, 2000);
   try {
     db.prepare("INSERT INTO bot_logs (bot_id, line, stream) VALUES (?, ?, ?)").run(botId, trimmed, stream);
     db.prepare(`
@@ -178,39 +181,94 @@ function appendLog(botId, line, stream = "stdout") {
   } catch (_) {}
 }
 
-async function startBotProcess(bot) {
-  if (runningProcesses.has(bot.id)) return { ok: false, error: "Bot is already running" };
-  if (!bot.code && !bot.token) return { ok: false, error: "Bot has no code or token to run" };
+// Detect which npm packages the bot code actually requires
+function detectRequiredPackages(code) {
+  const matches = [...code.matchAll(/require\(\s*['"]([^./\s'"@][^'"]*)['"]\s*\)/g)];
+  const importMatches = [...code.matchAll(/^import\s+.*?\s+from\s+['"]([^./\s'"@][^'"]*)['"]/gm)];
+  const all = new Set([
+    ...matches.map(m => m[1].split("/")[0]),
+    ...importMatches.map(m => m[1].split("/")[0]),
+  ]);
+  // Strip known Node.js built-ins
+  const builtins = new Set([
+    "fs","path","os","http","https","crypto","events","stream","util",
+    "child_process","buffer","url","net","tls","dns","readline","assert",
+    "zlib","timers","string_decoder","querystring","punycode","cluster",
+    "worker_threads","perf_hooks","v8","vm","module","process",
+  ]);
+  return [...all].filter(p => !builtins.has(p));
+}
 
-  const botDir = path.join(os.tmpdir(), `sutra-bot-${bot.id}`);
-  fs.mkdirSync(botDir, { recursive: true });
+// Install npm deps into the bot's temp dir, returns error string or null
+async function installDeps(botDir, packages) {
+  if (!packages.length) return null;
+  return new Promise((resolve) => {
+    const pkgJson = {
+      name: "sutra-bot",
+      version: "1.0.0",
+      type: "commonjs",
+      dependencies: Object.fromEntries(packages.map(p => [p, "latest"])),
+    };
+    fs.writeFileSync(path.join(botDir, "package.json"), JSON.stringify(pkgJson, null, 2));
 
+    appendLog("_install_", `[sutra] Installing: ${packages.join(", ")}`, "system");
+    const npm = spawn("npm", ["install", "--prefer-offline", "--no-audit", "--no-fund", "--loglevel=error"], {
+      cwd: botDir,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stderr = "";
+    npm.stderr.on("data", d => { stderr += d.toString(); });
+    npm.on("close", code => {
+      resolve(code === 0 ? null : `npm install failed: ${stderr.slice(0, 500)}`);
+    });
+    npm.on("error", err => resolve(`npm spawn error: ${err.message}`));
+  });
+}
+
+async function spawnBotProcess(bot, botDir, restartCount = 0) {
   const { cmd, ext, args = [] } = getRuntimeCmd(bot.runtime);
   const codeFile = path.join(botDir, `bot${ext}`);
-  const code = bot.code || `console.log('Bot ${bot.name} started with token-only mode');`;
+  const code = bot.code || `console.log('Bot ${bot.name} started (token-only mode)');`;
   fs.writeFileSync(codeFile, code, "utf8");
+
+  // Install dependencies for Node.js bots
+  if (bot.runtime === "nodejs" || !bot.runtime) {
+    const packages = detectRequiredPackages(code);
+    if (packages.length) {
+      appendLog(bot.id, `[sutra] Detected packages: ${packages.join(", ")}`, "system");
+      const err = await installDeps(botDir, packages);
+      if (err) {
+        appendLog(bot.id, `[sutra] Dependency install failed: ${err}`, "stderr");
+        return { ok: false, error: err };
+      }
+      appendLog(bot.id, `[sutra] Dependencies installed successfully`, "system");
+    }
+  }
+
+  // Java compile step
+  if (bot.runtime === "java") {
+    try {
+      const { execSync } = await import("child_process");
+      execSync(`javac "${codeFile}"`, { cwd: botDir });
+    } catch (e) {
+      return { ok: false, error: `Java compile error: ${e.message}` };
+    }
+  }
 
   const botEnv = {
     ...process.env,
     TOKEN: bot.token || "",
     BOT_ID: bot.id,
     BOT_NAME: bot.name,
-    NODE_PATH: path.join(__dirname, "node_modules"),
   };
 
   let spawnArgs;
-  if (bot.runtime === "go") {
-    spawnArgs = [...args, codeFile];
-  } else if (bot.runtime === "java") {
-    try {
-      const { execSync } = await import("child_process");
-      execSync(`javac "${codeFile}"`, { cwd: botDir });
-    } catch (e) {
-      fs.rmSync(botDir, { recursive: true, force: true });
-      return { ok: false, error: `Java compile error: ${e.message}` };
-    }
+  if (bot.runtime === "java") {
     const className = path.basename(codeFile, ".java");
     spawnArgs = ["-cp", botDir, className];
+  } else if (bot.runtime === "go") {
+    spawnArgs = [...args, codeFile];
   } else {
     spawnArgs = [...args, codeFile];
   }
@@ -224,29 +282,99 @@ async function startBotProcess(bot) {
       detached: false,
     });
   } catch (e) {
-    fs.rmSync(botDir, { recursive: true, force: true });
     return { ok: false, error: `Failed to spawn process: ${e.message}` };
   }
 
-  const startedAt = Date.now();
-  proc.stdout.on("data", (data) => appendLog(bot.id, data.toString().trim()));
-  proc.stderr.on("data", (data) => appendLog(bot.id, data.toString().trim(), "stderr"));
+  return { ok: true, proc };
+}
 
-  proc.on("exit", (code, signal) => {
+async function startBotProcess(bot) {
+  if (runningProcesses.has(bot.id)) return { ok: false, error: "Bot is already running" };
+  if (!bot.code && !bot.token) return { ok: false, error: "Bot has no code or token to run" };
+
+  const botDir = path.join(os.tmpdir(), `sutra-bot-${bot.id}`);
+  fs.mkdirSync(botDir, { recursive: true });
+
+  let restartCount = 0;
+  let manualStop = false;
+
+  async function launch() {
+    const result = await spawnBotProcess(bot, botDir, restartCount);
+    if (!result.ok) {
+      try { fs.rmSync(botDir, { recursive: true, force: true }); } catch (_) {}
+      db.prepare("UPDATE bots SET status='stopped', updated_at=strftime('%s','now') WHERE id=?").run(bot.id);
+      return result;
+    }
+
+    const { proc } = result;
+    const startedAt = Date.now();
+
+    proc.stdout.on("data", (data) => {
+      data.toString().split("\n").filter(Boolean).forEach(line => appendLog(bot.id, line));
+    });
+    proc.stderr.on("data", (data) => {
+      data.toString().split("\n").filter(Boolean).forEach(line => appendLog(bot.id, line, "stderr"));
+    });
+    proc.on("error", (err) => appendLog(bot.id, `[sutra] Process error: ${err.message}`, "stderr"));
+
+    proc.on("exit", (exitCode, signal) => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      try {
+        db.prepare("UPDATE bots SET uptime_seconds=uptime_seconds+? WHERE id=?").run(elapsed, bot.id);
+      } catch (_) {}
+
+      appendLog(bot.id, `[sutra] Process exited (code=${exitCode}, signal=${signal})`, "system");
+
+      if (manualStop || signal === "SIGTERM" || signal === "SIGKILL") {
+        runningProcesses.delete(bot.id);
+        try { fs.rmSync(botDir, { recursive: true, force: true }); } catch (_) {}
+        db.prepare("UPDATE bots SET status='stopped', updated_at=strftime('%s','now') WHERE id=?").run(bot.id);
+        return;
+      }
+
+      // Auto-restart with backoff
+      if (restartCount < MAX_RESTARTS) {
+        const delay = RESTART_BACKOFF_MS[restartCount] ?? 60000;
+        restartCount++;
+        db.prepare("UPDATE bots SET restart_count=restart_count+1, status='restarting', updated_at=strftime('%s','now') WHERE id=?").run(bot.id);
+        appendLog(bot.id, `[sutra] Restarting in ${delay / 1000}s... (attempt ${restartCount}/${MAX_RESTARTS})`, "system");
+
+        // Update the entry so stopBotProcess still works during backoff
+        const entry = runningProcesses.get(bot.id);
+        if (entry) entry.restartTimer = setTimeout(async () => {
+          if (!runningProcesses.has(bot.id)) return; // was stopped during backoff
+          const r = await launch();
+          if (r && !r.ok) {
+            appendLog(bot.id, `[sutra] Restart failed: ${r.error}`, "stderr");
+            runningProcesses.delete(bot.id);
+          }
+        }, delay);
+      } else {
+        runningProcesses.delete(bot.id);
+        try { fs.rmSync(botDir, { recursive: true, force: true }); } catch (_) {}
+        db.prepare("UPDATE bots SET status='stopped', updated_at=strftime('%s','now') WHERE id=?").run(bot.id);
+        appendLog(bot.id, `[sutra] Max restarts (${MAX_RESTARTS}) reached. Bot stopped.`, "system");
+      }
+    });
+
+    // Update entry with new process
+    const existing = runningProcesses.get(bot.id);
+    if (existing?.restartTimer) clearTimeout(existing.restartTimer);
+    runningProcesses.set(bot.id, { process: proc, startedAt, dir: botDir, manualStop: () => { manualStop = true; } });
+
+    db.prepare("UPDATE bots SET status='running', last_started=?, updated_at=strftime('%s','now') WHERE id=?")
+      .run(Math.floor(startedAt / 1000), bot.id);
+    appendLog(bot.id, `[sutra] Bot "${bot.name}" started (runtime=${bot.runtime || "nodejs"}, restarts=${restartCount})`, "system");
+    return { ok: true };
+  }
+
+  // Set a placeholder entry immediately so stopBotProcess can cancel pending restarts
+  runningProcesses.set(bot.id, { process: null, startedAt: Date.now(), dir: botDir, manualStop: () => { manualStop = true; } });
+  const result = await launch();
+  if (result && !result.ok) {
     runningProcesses.delete(bot.id);
-    try { fs.rmSync(botDir, { recursive: true, force: true }); } catch (_) {}
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-    try {
-      db.prepare("UPDATE bots SET status='stopped', uptime_seconds=uptime_seconds+?, updated_at=strftime('%s','now') WHERE id=?").run(elapsed, bot.id);
-    } catch (_) {}
-    appendLog(bot.id, `[sutra] Process exited (code=${code}, signal=${signal})`, "system");
-  });
-
-  proc.on("error", (err) => appendLog(bot.id, `[sutra] Process error: ${err.message}`, "stderr"));
-
-  runningProcesses.set(bot.id, { process: proc, startedAt, dir: botDir });
-  db.prepare("UPDATE bots SET status='running', last_started=?, updated_at=strftime('%s','now') WHERE id=?").run(Math.floor(startedAt / 1000), bot.id);
-  appendLog(bot.id, `[sutra] Bot "${bot.name}" started (runtime=${bot.runtime})`, "system");
+    return result;
+  }
   return { ok: true };
 }
 
@@ -254,10 +382,19 @@ function stopBotProcess(botId, reason = "user request") {
   const entry = runningProcesses.get(botId);
   if (!entry) return false;
   appendLog(botId, `[sutra] Stopping bot (reason: ${reason})`, "system");
+
+  // Signal the restart loop not to re-launch
+  if (typeof entry.manualStop === "function") entry.manualStop();
+  // Cancel any pending restart timer
+  if (entry.restartTimer) clearTimeout(entry.restartTimer);
+
   try {
-    entry.process.kill("SIGTERM");
-    setTimeout(() => { try { entry.process.kill("SIGKILL"); } catch (_) {} }, 5000);
+    if (entry.process) {
+      entry.process.kill("SIGTERM");
+      setTimeout(() => { try { entry.process?.kill("SIGKILL"); } catch (_) {} }, 5000);
+    }
   } catch (_) {}
+
   runningProcesses.delete(botId);
   return true;
 }
