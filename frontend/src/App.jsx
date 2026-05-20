@@ -29,6 +29,21 @@ function AppInner() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function refreshUser() {
+    try {
+      const { user, isOwner } = await api.me();
+      setUser(user);
+      setIsOwner(!!isOwner);
+    } catch (_) {}
+  }
+
+  // Re-fetch user when tab regains focus (catches plan changes made in admin panel)
+  useEffect(() => {
+    const onFocus = () => { if (getToken()) refreshUser(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 16 }}>
@@ -41,7 +56,7 @@ function AppInner() {
   const isLoggedIn = !!user;
 
   return (
-    <AuthCtx.Provider value={{ user, setUser, isOwner, setIsOwner }}>
+    <AuthCtx.Provider value={{ user, setUser, isOwner, setIsOwner, refreshUser }}>
       <div className="mesh-bg" />
       {isLoggedIn && location.pathname !== "/" && <Sidebar />}
       <AnimatePresence mode="wait">
