@@ -24,10 +24,10 @@ export default function AdminPage() {
     }
   }, [tab]);
 
-  async function changePlan(discordId, plan) {
+  async function changePlan(userId, plan) {
     try {
-      await api.adminSetPlan(discordId, plan);
-      setUsers(u => u.map(x => x.discord_id === discordId ? { ...x, plan } : x));
+      await api.adminSetPlan(userId, plan);
+      setUsers(u => u.map(x => x.id === userId ? { ...x, plan } : x));
       toast(`Plan updated to ${plan}`, "success");
     } catch (e) {
       toast(e.message, "error");
@@ -155,7 +155,7 @@ export default function AdminPage() {
                       {stats.recentUsers.slice(0, 6).map(u => {
                         const av = getAvatarUrl(u);
                         return (
-                          <div key={u.discord_id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             {av ? (
                               <img src={av} style={{ width: 28, height: 28, borderRadius: "50%" }} alt="" />
                             ) : (
@@ -197,7 +197,7 @@ export default function AdminPage() {
                       {users.map(u => {
                         const av = getAvatarUrl(u);
                         return (
-                          <tr key={u.discord_id}>
+                          <tr key={u.id}>
                             <td>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 {av ? (
@@ -208,10 +208,9 @@ export default function AdminPage() {
                                   </div>
                                 )}
                                 <span style={{ fontSize: 13, fontWeight: 600 }}>{u.username}</span>
-                                {u.discord_id === "1304126568817229875" && <span style={{ fontSize: 10, color: "#fbbf24" }}>👑</span>}
                               </div>
                             </td>
-                            <td><span style={{ fontSize: 12, color: "var(--text2)", fontFamily: "monospace" }}>{u.discord_id}</span></td>
+                            <td><span style={{ fontSize: 12, color: "var(--text2)", fontFamily: "monospace" }}>{u.id}</span></td>
                             <td>
                               <span className={`badge badge-${u.plan || "free"}`} style={{ textTransform: "capitalize" }}>
                                 {u.plan || "free"}
@@ -224,7 +223,7 @@ export default function AdminPage() {
                                 className="input"
                                 style={{ width: 110, padding: "5px 8px", fontSize: 12 }}
                                 value={u.plan || "free"}
-                                onChange={e => changePlan(u.discord_id, e.target.value)}
+                                onChange={e => changePlan(u.id, e.target.value)}
                               >
                                 {["free", "starter", "pro", "ultra"].map(p => (
                                   <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
