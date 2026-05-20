@@ -405,9 +405,28 @@ app.get("/auth/discord/callback", (req, res) => {
   res.redirect(`${frontendUrl}/auth/callback?code=${encodeURIComponent(code)}`);
 });
 
-// ─── exchange-code: browser POSTs the Discord code here ──────────────────────
-// The browser calls this directly (user's own IP) — bypasses Render's shared IP
-// rate limit issue with Discord. Client secret stays on server, code stays safe.
+// ─── verify: browser already exchanged code with Discord, sends us the access_token ──
+// This is the PRIMARY auth path. The browser exchanges the code directly with
+// Discord (using the user's own IP — never rate-limited), then POSTs the
+// resulting access_token here. We verify it by fetching /users/@me, upsert the
+// user, and return a signed JWT. The client_secret never leaves this server.
+app.post("/auth/discord/verify", async (req, res) => {
+  const { access_token } = req.body;
+  if (!access_token) return res.status(400).json({ error: "Missing access_token" });
+
+  try {
+    const jwt = await upsertDiscordUser(access_token, req.ip);
+    res.json({ token: jwt });
+  } catch (err) {
+    console.error("verify error:", err.message);
+    res.status(401).json({ error: err.message || "Auth failed" });
+  }
+});
+
+// ─── exchange-code: FALLBACK — browser POSTs the raw Discord code here ────────
+// Used only when the browser-side token exchange fails (e.g. confidential app
+// that requires client_secret). This route still hits Discord from Render's IP
+// and may 429, but it's a safety net for apps that can't use the /verify path.
 app.post("/auth/discord/exchange-code", async (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: "Missing code" });
