@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../App.jsx";
-import { api, COUNTRIES, RUNTIMES, getCountry, timeAgo, formatUptime } from "../api.js";
+import { api, uploadWithProgress, COUNTRIES, RUNTIMES, getCountry, timeAgo, formatUptime } from "../api.js";
 import { useToast } from "../Toast.jsx";
 
 // ─── Deploy Modal ──────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ function DeployModal({ onClose, onCreate, plans, userPlan }) {
   });
   const [files, setFiles] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(null); // null | 0-100
   const [error, setError] = React.useState("");
   const fileInputRef = React.useRef(null);
   const allowedCountries = plan.countries || ["india"];
@@ -81,8 +82,14 @@ client.run(os.environ['TOKEN'])`,
         if (form.token) formData.append("token", form.token);
         formData.append("runtime", form.runtime);
         formData.append("country", form.country);
-        await onCreate(formData);
-        setLoading(false);
+        setUploadProgress(0);
+        try {
+          const bot = await uploadWithProgress("bots/upload", formData, (pct) => setUploadProgress(pct));
+          await onCreate(bot, true); // true = already created, just add to list
+        } finally {
+          setUploadProgress(null);
+          setLoading(false);
+        }
         onClose();
         return;
       }
@@ -250,6 +257,21 @@ client.run(os.environ['TOKEN'])`,
         {error && (
           <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(237,66,69,0.12)", border: "1px solid rgba(237,66,69,0.3)", color: "#f87171", fontSize: 13 }}>
             ⚠ {error}
+          </div>
+        )}
+
+        {uploadProgress !== null && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text2)", marginBottom: 6 }}>
+              <span>⬆ Uploading archive...</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 99, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 99, background: "linear-gradient(90deg, #5865F2, #a5b4fc)", width: `${uploadProgress}%`, transition: "width 0.2s ease" }} />
+            </div>
+            {uploadProgress === 100 && (
+              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>Upload complete — extracting and saving...</div>
+            )}
           </div>
         )}
 
@@ -625,9 +647,9 @@ export default function BotsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  async function handleCreate(data) {
+  async function handleCreate(data, alreadyCreated = false) {
     try {
-      const bot = await api.createBot(data);
+      const bot = alreadyCreated ? data : await api.createBot(data);
       setBots(prev => [bot, ...prev]);
       toast(`Bot "${bot.name}" deployed! Click Start to run it.`, "success");
     } catch (e) {
