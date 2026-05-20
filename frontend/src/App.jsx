@@ -21,36 +21,44 @@ function AppInner() {
   const location = useLocation();
 
   useEffect(() => {
-    // Grab token from URL if redirected back from OAuth
     const params = new URLSearchParams(location.search);
     const tokenFromUrl = params.get("token");
-    if (tokenFromUrl) {
-      setToken(tokenFromUrl);
-      // Clean token out of URL
-      navigate(location.pathname, { replace: true });
-    }
+    const hasError = params.get("error");
 
     // Handle OAuth error
-    if (params.get("error")) {
+    if (hasError) {
       navigate("/", { replace: true });
       setLoading(false);
       return;
     }
 
-    // Load user if we have a token
+    // Store token if it came back in the URL from Discord OAuth
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl);
+    }
+
     const token = tokenFromUrl || getToken();
+
     if (!token) {
       setLoading(false);
       return;
     }
 
+    // Fetch the user FIRST, then clean the URL — this prevents the race
+    // condition where navigate() triggers a re-render before user is set,
+    // causing the protected route to redirect back to "/"
     api.me().then(({ user, isOwner }) => {
       setUser(user);
       setIsOwner(isOwner);
       setLoading(false);
+      // Only clean URL after user is confirmed — safe to navigate now
+      if (tokenFromUrl) {
+        navigate(location.pathname, { replace: true });
+      }
     }).catch(() => {
-      clearToken(); // token invalid/expired
+      clearToken();
       setLoading(false);
+      navigate("/", { replace: true });
     });
   }, []);
 
