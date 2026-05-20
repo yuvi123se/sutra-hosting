@@ -6,9 +6,17 @@ export function clearToken() { localStorage.removeItem("sutra_token"); }
 
 async function req(method, path, body) {
   const token = getToken();
-  const opts = { method, headers: { "Content-Type": "application/json" } };
+  const isFormData = body instanceof FormData;
+  const opts = { method, headers: {} };
   if (token) opts.headers["Authorization"] = `Bearer ${token}`;
-  if (body !== undefined) opts.body = JSON.stringify(body);
+  if (body !== undefined) {
+    if (isFormData) {
+      opts.body = body; // let browser set Content-Type with boundary
+    } else {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+  }
   const res = await fetch(`${BASE}/${path}`, opts);
   if (res.status === 204) return {};
   const data = await res.json();
@@ -28,7 +36,7 @@ export const api = {
 
   // Bots
   bots: () => req("GET", "bots"),
-  createBot: (data) => req("POST", "bots", data),
+  createBot: (data) => data instanceof FormData ? req("POST", "bots/upload", data) : req("POST", "bots", data),
   updateBot: (id, data) => req("PATCH", `bots/${id}`, data),
   deleteBot: (id) => req("DELETE", `bots/${id}`),
   uploadCode: (id, code) => req("PATCH", `bots/${id}`, { code }),
