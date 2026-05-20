@@ -1,4 +1,4 @@
-const BASE = "https://sutra-api-ldhf.onrender.com";
+const BASE = "https://sutra-hosting.onrender.com";
 
 export function getToken() {
   return localStorage.getItem("sutra_token");
