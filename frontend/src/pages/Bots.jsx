@@ -69,6 +69,12 @@ client.run(os.environ['TOKEN'])`,
       if (tab === "code") payload.token = "";
       if (tab === "files") {
         const file = files[0];
+        const maxMb = plan.maxUploadMb ?? 25;
+        if (file.size > maxMb * 1024 * 1024) {
+          setError(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Your ${plan.name || "current"} plan allows up to ${maxMb} MB. Upgrade for a higher limit.`);
+          setLoading(false);
+          return;
+        }
         const formData = new FormData();
         formData.append("file", file);
         formData.append("name", form.name.trim());
@@ -174,7 +180,9 @@ client.run(os.environ['TOKEN'])`,
               >
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text1)" }}>Drop your archive here or click to browse</div>
-                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>Accepts .tar.gz, .tgz, or .zip — your bot project bundled up</div>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
+                  Accepts .tar.gz, .tgz, or .zip — up to {plan.maxUploadMb >= 1024 ? `${plan.maxUploadMb / 1024} GB` : `${plan.maxUploadMb ?? 25} MB`} on your {plan.name || "current"} plan
+                </div>
               </div>
               <input
                 ref={fileInputRef}
