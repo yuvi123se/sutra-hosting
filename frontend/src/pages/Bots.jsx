@@ -558,7 +558,7 @@ function BotCard({ bot, onEdit, onDelete, onStart, onStop, onRestart, onLogs, ac
 
 // ─── Main Bots Page ────────────────────────────────────────────────────────────
 export default function BotsPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const toast = useToast();
   const [bots, setBots] = useState([]);
   const [plans, setPlans] = useState({});
@@ -566,11 +566,11 @@ export default function BotsPage() {
   const [showDeploy, setShowDeploy] = useState(false);
   const [editBot, setEditBot] = useState(null);
   const [logsBot, setLogsBot] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null); // botId being acted on
+  const [actionLoading, setActionLoading] = useState(null);
 
   async function load() {
     try {
-      const [b, p] = await Promise.all([api.bots(), api.plans()]);
+      const [b, p] = await Promise.all([api.bots(), api.plans(), refreshUser()]);
       setBots(b);
       setPlans(p);
     } catch (e) {
