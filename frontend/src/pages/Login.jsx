@@ -98,8 +98,10 @@ export default function LoginPage() {
         data = await api.register(username, password, email);
       }
       setToken(data.token);
-      setUser(data.user);
-      setIsOwner(data.isOwner ?? false);
+      // Always fetch fresh user from DB after login (so plan changes made by admin are reflected)
+      const me = await api.me();
+      setUser(me.user);
+      setIsOwner(me.isOwner ?? false);
       navigate("/dashboard", { replace: true });
     } catch (err) {
       toast(err.message || "Something went wrong", "error");
