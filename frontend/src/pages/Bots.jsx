@@ -141,17 +141,6 @@ client.run(os.environ['TOKEN'])`,
                 rows={12}
                 style={{ fontFamily: "'Fira Code', 'Cascadia Code', monospace", fontSize: 12, resize: "vertical", lineHeight: 1.6, minHeight: 180 }}
               />
-              <div style={{ marginTop: 6 }}>
-                <label className="label" style={{ marginBottom: 4 }}>Bot Token</label>
-                <input
-                  className="input" type="password"
-                  placeholder="Discord bot token (injected as TOKEN env var)"
-                  value={form.token} onChange={e => set("token", e.target.value)}
-                />
-              </div>
-              <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>
-                🔒 Token stored securely — injected as <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 3 }}>TOKEN</code> environment variable at runtime
-              </p>
             </div>
           ) : tab === "files" ? (
             <div>
@@ -219,16 +208,8 @@ client.run(os.environ['TOKEN'])`,
                   ))}
                 </div>
               )}
-              <div style={{ marginTop: 10 }}>
-                <label className="label" style={{ marginBottom: 4 }}>Bot Token</label>
-                <input
-                  className="input" type="password"
-                  placeholder="Discord bot token (injected as TOKEN env var)"
-                  value={form.token} onChange={e => set("token", e.target.value)}
-                />
-              </div>
               <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>
-                🔒 Token stored securely — injected as <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 3 }}>TOKEN</code> environment variable at runtime
+                All files are bundled together and deployed as a single bot project.
               </p>
             </div>
           ) : (
