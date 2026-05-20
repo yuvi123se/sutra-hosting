@@ -108,7 +108,7 @@ export default function LoginPage() {
           <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, letterSpacing: "-0.02em" }}>Sutra Hosting</span>
         </div>
         <a
-          href="https://sutra-api-ldhf.onrender.com/auth/discord"
+          href="https://sutra-hosting.onrender.com/auth/discord"
           style={{
             display: "inline-flex", alignItems: "center", gap: 8,
             padding: "10px 20px", borderRadius: 12,
