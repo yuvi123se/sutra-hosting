@@ -6,9 +6,10 @@ import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import fs from "fs";
 import os from "os";
+import multer from "multer";
 
 dotenv.config();
 
@@ -124,6 +125,19 @@ function verifyJWT(token) {
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
+
+// ─── File Upload (multer) ──────────────────────────────────────────────────────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(tar\.gz|tgz|zip)$/i.test(file.originalname) ||
+               file.mimetype === "application/gzip" ||
+               file.mimetype === "application/x-tar" ||
+               file.mimetype === "application/zip";
+    cb(ok ? null : new Error("Only .tar.gz, .tgz, or .zip archives are accepted"), ok);
+  },
+});
 
 // ─── Auth Middleware ───────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
@@ -626,7 +640,92 @@ app.get("/bots/:id/status", requireAuth, (req, res) => {
   });
 });
 
-// ─── Admin Routes ──────────────────────────────────────────────────────────────
+// ─── Archive Upload Route ──────────────────────────────────────────────────────
+// POST /bots/upload — create a bot from a .tar.gz / .tgz / .zip archive
+// Multipart fields: name, token (opt), runtime (opt), country (opt), file (the archive)
+app.post("/bots/upload", requireAuth, (req, res) => {
+  upload.single("file")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "No archive file provided" });
+
+    const { name, token, runtime, country } = req.body;
+    if (!name || name.trim().length < 2)
+      return res.status(400).json({ error: "Bot name must be at least 2 characters" });
+
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.userId);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const plan = PLANS[user.plan] || PLANS.free;
+
+    const botCount = db.prepare("SELECT COUNT(*) as cnt FROM bots WHERE user_id = ?").get(user.id);
+    if (plan.maxBots !== -1 && botCount.cnt >= plan.maxBots)
+      return res.status(403).json({ error: `Your ${plan.name} plan allows only ${plan.maxBots} bot(s). Upgrade for more!` });
+
+    // Extract archive to a temp dir, read all text files into code
+    const extractDir = path.join(os.tmpdir(), `sutra-upload-${crypto.randomUUID()}`);
+    fs.mkdirSync(extractDir, { recursive: true });
+
+    try {
+      const archivePath = path.join(extractDir, req.file.originalname);
+      fs.writeFileSync(archivePath, req.file.buffer);
+
+      const filename = req.file.originalname.toLowerCase();
+      if (filename.endsWith(".zip")) {
+        execSync(`unzip -q "${archivePath}" -d "${extractDir}"`);
+      } else {
+        // .tar.gz or .tgz
+        execSync(`tar -xzf "${archivePath}" -C "${extractDir}"`);
+      }
+      fs.rmSync(archivePath); // remove the raw archive
+
+      // Walk extracted files, collect all readable text files (skip node_modules, .git, binaries)
+      const TEXT_EXTS = new Set([".js", ".mjs", ".cjs", ".ts", ".py", ".go", ".java", ".json", ".env", ".txt", ".md", ".sh", ".yaml", ".yml", ".toml"]);
+      const SKIP_DIRS = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"]);
+
+      function walkFiles(dir, rootDir = dir) {
+        const result = [];
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory()) {
+            if (!SKIP_DIRS.has(entry.name)) result.push(...walkFiles(path.join(dir, entry.name), rootDir));
+          } else {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (TEXT_EXTS.has(ext)) {
+              result.push(path.join(dir, entry.name));
+            }
+          }
+        }
+        return result;
+      }
+
+      const textFiles = walkFiles(extractDir);
+      if (textFiles.length === 0) {
+        fs.rmSync(extractDir, { recursive: true, force: true });
+        return res.status(400).json({ error: "No recognized source files found in archive (.js, .py, .ts, .go, .java etc.)" });
+      }
+
+      const codeChunks = textFiles.map(fp => {
+        const rel = path.relative(extractDir, fp);
+        const content = fs.readFileSync(fp, "utf8");
+        return `// === ${rel} ===\n${content}`;
+      });
+      const code = codeChunks.join("\n\n");
+
+      fs.rmSync(extractDir, { recursive: true, force: true });
+
+      const selectedCountry = plan.countries.includes(country) ? country : plan.defaultCountry;
+      const botId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO bots (id, user_id, name, token, code, runtime, country, status, ram_mb, cpu_limit, plan)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?)
+      `).run(botId, user.id, name.trim(), token || null, code, runtime || "nodejs", selectedCountry, plan.ramMb, plan.cpuLimit, user.plan);
+
+      res.json(db.prepare("SELECT * FROM bots WHERE id = ?").get(botId));
+    } catch (e) {
+      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) {}
+      console.error("Upload extract error:", e.message);
+      res.status(500).json({ error: `Failed to extract archive: ${e.message}` });
+    }
+  });
+});
 app.get("/admin/stats", requireOwner, (req, res) => {
   const totalUsers = db.prepare("SELECT COUNT(*) as cnt FROM users").get();
   const totalBots = db.prepare("SELECT COUNT(*) as cnt FROM bots").get();
