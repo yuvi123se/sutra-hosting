@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../App.jsx";
@@ -12,10 +12,12 @@ const NAV = [
 ];
 
 export default function Sidebar() {
-  const { user, setUser, isOwner } = useAuth();
+  const { user, setUser, isOwner, refreshUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
+
+  useEffect(() => { refreshUser(); }, [location.pathname]);
 
   async function handleLogout() {
     try {
