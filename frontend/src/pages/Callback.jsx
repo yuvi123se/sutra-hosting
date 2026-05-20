@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { setToken } from "../api.js";
 
-const API_BASE = "https://sutra-api-ldhf.onrender.com";
+const BASE = "https://sutra-api-ldhf.onrender.com";
 
 // This page handles /auth/callback?code=...
 // Discord redirects to backend /auth/discord/callback which bounces the
