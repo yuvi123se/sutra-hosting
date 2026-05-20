@@ -35,6 +35,8 @@ export const api = {
   startBot: (id) => req("POST", `bots/${id}/start`),
   stopBot: (id) => req("POST", `bots/${id}/stop`),
   restartBot: (id) => req("POST", `bots/${id}/restart`),
+  archiveBot: (id) => req("POST", `bots/${id}/archive`),
+  unarchiveBot: (id) => req("POST", `bots/${id}/unarchive`),
   botLogs: (id) => req("GET", `bots/${id}/logs`),
   botStatus: (id) => req("GET", `bots/${id}/status`),
 
