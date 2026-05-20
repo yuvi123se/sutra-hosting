@@ -4,6 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import { ToastProvider } from "./Toast.jsx";
 import { api, getToken, setToken, clearToken } from "./api.js";
 import LoginPage from "./pages/Login.jsx";
+import CallbackPage from "./pages/Callback.jsx";
 import DashboardPage from "./pages/Dashboard.jsx";
 import BotsPage from "./pages/Bots.jsx";
 import PlansPage from "./pages/Plans.jsx";
@@ -17,29 +18,16 @@ function AppInner() {
   const [user, setUser] = useState(null);
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    // Read token synchronously from URL — do this before any async work
-    const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get("token");
-    const hasError = params.get("error");
-
-    if (hasError) {
-      window.history.replaceState({}, "", "/");
+    // /auth/callback is handled entirely by CallbackPage — skip auth check
+    if (location.pathname === "/auth/callback") {
       setLoading(false);
       return;
     }
 
-    if (tokenFromUrl) {
-      // Save and immediately strip from URL (no React re-render)
-      setToken(tokenFromUrl);
-      window.history.replaceState({}, "", "/dashboard");
-    }
-
-    const token = tokenFromUrl || getToken();
-
+    const token = getToken();
     if (!token) {
       setLoading(false);
       return;
@@ -51,17 +39,9 @@ function AppInner() {
         setIsOwner(isOwner);
       })
       .catch(() => {
-        // Only clear token and redirect if there was NO fresh token from URL.
-        // A fresh URL token means Discord just authenticated us — the backend
-        // is probably cold-starting on Render. Don't boot the user out.
-        if (!tokenFromUrl) {
-          clearToken();
-          window.history.replaceState({}, "", "/");
-        }
+        clearToken();
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -78,10 +58,11 @@ function AppInner() {
   return (
     <AuthCtx.Provider value={{ user, setUser, isOwner }}>
       <div className="mesh-bg" />
-      {isLoggedIn && location.pathname !== "/" && <Sidebar />}
+      {isLoggedIn && !["/", "/auth/callback"].includes(location.pathname) && <Sidebar />}
       <AnimatePresence mode="wait">
         <Routes>
           <Route path="/" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+          <Route path="/auth/callback" element={<CallbackPage />} />
           <Route path="/dashboard" element={isLoggedIn ? <DashboardPage /> : <Navigate to="/" replace />} />
           <Route path="/bots" element={isLoggedIn ? <BotsPage /> : <Navigate to="/" replace />} />
           <Route path="/plans" element={isLoggedIn ? <PlansPage /> : <Navigate to="/" replace />} />
