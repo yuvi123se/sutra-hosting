@@ -12,7 +12,9 @@ function DeployModal({ onClose, onCreate, plans, userPlan }) {
     name: "", token: "", code: "", runtime: "nodejs",
     country: plan.defaultCountry || "india"
   });
+  const [files, setFiles] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
+  const fileInputRef = React.useRef(null);
   const allowedCountries = plan.countries || ["india"];
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
@@ -57,11 +59,22 @@ client.run(os.environ['TOKEN'])`,
   async function submit() {
     if (!form.name.trim()) return;
     if (tab === "code" && !form.code.trim()) return;
+    if (tab === "files" && files.length === 0) return;
     setLoading(true);
     try {
       const payload = { ...form };
       if (tab === "token") payload.code = "";
       if (tab === "code") payload.token = "";
+      if (tab === "files") {
+        // Read all files and combine into code payload
+        const fileContents = await Promise.all(files.map(f => new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(`// === ${f.name} ===\n${e.target.result}`);
+          reader.onerror = reject;
+          reader.readAsText(f);
+        })));
+        payload.code = fileContents.join("\n\n");
+      }
       await onCreate(payload);
       onClose();
     } catch (e) {
@@ -95,6 +108,7 @@ client.run(os.environ['TOKEN'])`,
 
         <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "rgba(255,255,255,0.04)", padding: 4, borderRadius: 12 }}>
           <button style={tabStyle(tab === "code")} onClick={() => setTab("code")}>📝 Paste Code</button>
+          <button style={tabStyle(tab === "files")} onClick={() => setTab("files")}>📁 Upload Files</button>
           <button style={tabStyle(tab === "token")} onClick={() => setTab("token")}>🔑 Token Only</button>
         </div>
 
@@ -139,6 +153,84 @@ client.run(os.environ['TOKEN'])`,
                 🔒 Token stored securely — injected as <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 3 }}>TOKEN</code> environment variable at runtime
               </p>
             </div>
+          ) : tab === "files" ? (
+            <div>
+              <label className="label">Bot Files *</label>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const dropped = Array.from(e.dataTransfer.files);
+                  setFiles(prev => {
+                    const names = new Set(prev.map(f => f.name));
+                    return [...prev, ...dropped.filter(f => !names.has(f.name))];
+                  });
+                }}
+                style={{
+                  border: "2px dashed rgba(88,101,242,0.4)",
+                  borderRadius: 12,
+                  padding: "28px 20px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  background: "rgba(88,101,242,0.04)",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(88,101,242,0.08)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(88,101,242,0.04)"}
+              >
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text1)" }}>Drop files here or click to browse</div>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>Select multiple .js, .py, .ts, .json files etc.</div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: "none" }}
+                onChange={e => {
+                  const selected = Array.from(e.target.files);
+                  setFiles(prev => {
+                    const names = new Set(prev.map(f => f.name));
+                    return [...prev, ...selected.filter(f => !names.has(f.name))];
+                  });
+                  e.target.value = "";
+                }}
+              />
+              {files.length > 0 && (
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {files.map((f, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)",
+                      borderRadius: 8, padding: "7px 10px", fontSize: 12
+                    }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                        📄 {f.name}
+                      </span>
+                      <span style={{ color: "var(--text3)", marginLeft: 8, flexShrink: 0 }}>
+                        {(f.size / 1024).toFixed(1)} KB
+                      </span>
+                      <button
+                        onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", marginLeft: 8, padding: "0 2px", fontSize: 14, lineHeight: 1 }}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 10 }}>
+                <label className="label" style={{ marginBottom: 4 }}>Bot Token</label>
+                <input
+                  className="input" type="password"
+                  placeholder="Discord bot token (injected as TOKEN env var)"
+                  value={form.token} onChange={e => set("token", e.target.value)}
+                />
+              </div>
+              <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>
+                🔒 Token stored securely — injected as <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 3 }}>TOKEN</code> environment variable at runtime
+              </p>
+            </div>
           ) : (
             <div>
               <label className="label">Bot Token <span style={{ color: "var(--text3)", textTransform: "none", letterSpacing: 0 }}>(optional — add later)</span></label>
@@ -171,7 +263,7 @@ client.run(os.environ['TOKEN'])`,
             className="btn btn-primary"
             style={{ flex: 2, justifyContent: "center" }}
             onClick={submit}
-            disabled={loading || !form.name.trim() || (tab === "code" && !form.code.trim())}
+            disabled={loading || !form.name.trim() || (tab === "code" && !form.code.trim()) || (tab === "files" && files.length === 0)}
           >
             {loading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "🚀 Deploy Bot"}
           </button>
