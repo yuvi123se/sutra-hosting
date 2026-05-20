@@ -45,11 +45,17 @@ export default function AdminPage() {
     }
   }
 
-  async function setBotStatus(id, status) {
+  async function setBotStatus(id, isCurrentlyRunning) {
     try {
-      const updated = await api.adminSetBotStatus(id, status);
-      setBots(b => b.map(x => x.id === id ? { ...x, ...updated } : x));
-      toast(`Bot ${status}`, "success");
+      if (isCurrentlyRunning) {
+        await api.adminStopBot(id);
+        setBots(b => b.map(x => x.id === id ? { ...x, status: "stopped" } : x));
+        toast("Bot stopped", "info");
+      } else {
+        await api.adminStartBot(id);
+        setBots(b => b.map(x => x.id === id ? { ...x, status: "running" } : x));
+        toast("Bot started!", "success");
+      }
     } catch (e) {
       toast(e.message, "error");
     }
@@ -271,9 +277,9 @@ export default function AdminPage() {
                             <td>
                               <div style={{ display: "flex", gap: 5 }}>
                                 <button className="btn btn-sm btn-success"
-                                  onClick={() => setBotStatus(bot.id, bot.status === "running" ? "stopped" : "running")}
+                                  onClick={() => setBotStatus(bot.id, bot.status === "running")}
                                   style={{ fontSize: 11 }}>
-                                  {bot.status === "running" ? "Stop" : "Start"}
+                                  {bot.status === "running" ? "■ Stop" : "▶ Start"}
                                 </button>
                                 <button className="btn btn-sm btn-danger" onClick={() => deleteBotAdmin(bot.id)} style={{ fontSize: 11 }}>
                                   ✕
