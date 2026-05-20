@@ -1,23 +1,12 @@
 const BASE = "https://sutra-hosting.onrender.com";
 
-export function getToken() {
-  return localStorage.getItem("sutra_token");
-}
-
-export function setToken(token) {
-  localStorage.setItem("sutra_token", token);
-}
-
-export function clearToken() {
-  localStorage.removeItem("sutra_token");
-}
+export function getToken() { return localStorage.getItem("sutra_token"); }
+export function setToken(token) { localStorage.setItem("sutra_token", token); }
+export function clearToken() { localStorage.removeItem("sutra_token"); }
 
 async function req(method, path, body) {
   const token = getToken();
-  const opts = {
-    method,
-    headers: { "Content-Type": "application/json" },
-  };
+  const opts = { method, headers: { "Content-Type": "application/json" } };
   if (token) opts.headers["Authorization"] = `Bearer ${token}`;
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(`${BASE}/${path}`, opts);
@@ -28,27 +17,32 @@ async function req(method, path, body) {
 }
 
 export const api = {
+  // Auth
+  login: (username, password) => req("POST", "auth/login", { username, password }),
+  register: (username, password, email) => req("POST", "auth/register", { username, password, email }),
   me: () => req("GET", "auth/me"),
   logout: () => req("POST", "auth/logout"),
+
+  // Plans
   plans: () => req("GET", "plans"),
 
+  // Bots
   bots: () => req("GET", "bots"),
   createBot: (data) => req("POST", "bots", data),
   updateBot: (id, data) => req("PATCH", `bots/${id}`, data),
   deleteBot: (id) => req("DELETE", `bots/${id}`),
   uploadCode: (id, code) => req("PATCH", `bots/${id}`, { code }),
-
-  // Bot control (real process management)
   startBot: (id) => req("POST", `bots/${id}/start`),
   stopBot: (id) => req("POST", `bots/${id}/stop`),
   restartBot: (id) => req("POST", `bots/${id}/restart`),
   botLogs: (id) => req("GET", `bots/${id}/logs`),
   botStatus: (id) => req("GET", `bots/${id}/status`),
 
+  // Admin
   adminStats: () => req("GET", "admin/stats"),
   adminUsers: () => req("GET", "admin/users"),
   adminBots: () => req("GET", "admin/bots"),
-  adminSetPlan: (discordId, plan) => req("PATCH", `admin/users/${discordId}/plan`, { plan }),
+  adminSetPlan: (userId, plan) => req("PATCH", `admin/users/${userId}/plan`, { plan }),
   adminDeleteBot: (id) => req("DELETE", `admin/bots/${id}`),
   adminStartBot: (id) => req("POST", `admin/bots/${id}/start`),
   adminStopBot: (id) => req("POST", `admin/bots/${id}/stop`),
@@ -66,22 +60,24 @@ export const COUNTRIES = [
 ];
 
 export const RUNTIMES = [
-  { id: "nodejs",  label: "Node.js", icon: "⬡" },
-  { id: "python",  label: "Python",  icon: "🐍" },
-  { id: "java",    label: "Java",    icon: "☕" },
-  { id: "go",      label: "Go",      icon: "🐹" },
+  { id: "nodejs", label: "Node.js", icon: "⬡" },
+  { id: "python", label: "Python",  icon: "🐍" },
+  { id: "java",   label: "Java",    icon: "☕" },
+  { id: "go",     label: "Go",      icon: "🐹" },
 ];
 
 export function getCountry(id) {
   return COUNTRIES.find(c => c.id === id) || { id, label: id, flag: "🌍" };
 }
 
+// Returns initials avatar since we no longer use Discord CDN
 export function getAvatarUrl(user) {
-  if (!user) return null;
-  if (user.avatar) {
-    return `https://cdn.discordapp.com/avatars/${user.discord_id}/${user.avatar}.png?size=64`;
-  }
-  return null;
+  return null; // UI should fall back to initials
+}
+
+export function getUserInitials(user) {
+  if (!user?.username) return "?";
+  return user.username.slice(0, 2).toUpperCase();
 }
 
 export function timeAgo(ts) {
