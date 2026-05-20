@@ -16,27 +16,26 @@ export const useAuth = () => useContext(AuthCtx);
 function AppInner() {
   const [user, setUser] = useState(null);
   const [isOwner, setIsOwner] = useState(false);
-  // Start as true so routes never render before we've resolved auth
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
+    // Read token synchronously from URL — do this before any async work
+    const params = new URLSearchParams(window.location.search);
     const tokenFromUrl = params.get("token");
     const hasError = params.get("error");
 
     if (hasError) {
-      navigate("/", { replace: true });
+      window.history.replaceState({}, "", "/");
       setLoading(false);
       return;
     }
 
     if (tokenFromUrl) {
+      // Save and immediately strip from URL (no React re-render)
       setToken(tokenFromUrl);
-      // Remove the token from the URL immediately (cosmetic only — user is
-      // not set yet but loading=true means no route is rendered yet)
-      window.history.replaceState({}, "", location.pathname);
+      window.history.replaceState({}, "", "/dashboard");
     }
 
     const token = tokenFromUrl || getToken();
@@ -50,14 +49,15 @@ function AppInner() {
       .then(({ user, isOwner }) => {
         setUser(user);
         setIsOwner(isOwner);
-        // If we came from OAuth redirect, make sure we land on /dashboard
-        if (tokenFromUrl) {
-          navigate("/dashboard", { replace: true });
-        }
       })
       .catch(() => {
-        clearToken();
-        navigate("/", { replace: true });
+        // Only clear token and redirect if there was NO fresh token from URL.
+        // A fresh URL token means Discord just authenticated us — the backend
+        // is probably cold-starting on Render. Don't boot the user out.
+        if (!tokenFromUrl) {
+          clearToken();
+          window.history.replaceState({}, "", "/");
+        }
       })
       .finally(() => {
         setLoading(false);
