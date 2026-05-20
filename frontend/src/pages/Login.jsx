@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { useLocation } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "../Toast.jsx";
+import { api, setToken } from "../api.js";
+import { useAuth } from "../App.jsx";
 
 const FEATURES = [
   { icon: "⚡", title: "Instant Deploy", desc: "Your bot live in under 30 seconds" },
@@ -18,48 +20,42 @@ const PLANS_PREVIEW = [
 ];
 
 export default function LoginPage() {
-  const location = useLocation();
+  const navigate = useNavigate();
   const toast = useToast();
+  const { setUser, setIsOwner } = useAuth();
   const canvasRef = useRef(null);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get("error") === "auth_failed") {
-      toast("Discord login failed. Please try again.", "error");
-    }
-  }, []);
+  const [mode, setMode] = useState("login"); // "login" | "register"
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
-  // Particle canvas effect
+  // Particle canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     let animId;
     const particles = [];
-    
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     resize();
     window.addEventListener("resize", resize);
 
     for (let i = 0; i < 60; i++) {
       particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
-        r: Math.random() * 1.5 + 0.5,
-        alpha: Math.random() * 0.4 + 0.1,
+        x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5, alpha: Math.random() * 0.4 + 0.1,
       });
     }
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       particles.forEach(p => {
-        p.x += p.vx;
-        p.y += p.vy;
+        p.x += p.vx; p.y += p.vy;
         if (p.x < 0) p.x = canvas.width;
         if (p.x > canvas.width) p.x = 0;
         if (p.y < 0) p.y = canvas.height;
@@ -69,8 +65,6 @@ export default function LoginPage() {
         ctx.fillStyle = `rgba(88,101,242,${p.alpha})`;
         ctx.fill();
       });
-
-      // Connect nearby
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
@@ -92,6 +86,38 @@ export default function LoginPage() {
     return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", resize); };
   }, []);
 
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    try {
+      let data;
+      if (mode === "login") {
+        data = await api.login(username, password);
+      } else {
+        data = await api.register(username, password, email);
+      }
+      setToken(data.token);
+      setUser(data.user);
+      setIsOwner(data.isOwner ?? false);
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      toast(err.message || "Something went wrong", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputStyle = {
+    width: "100%", padding: "11px 14px",
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid var(--border)",
+    borderRadius: 10, color: "var(--text1)",
+    fontSize: 14, outline: "none",
+    boxSizing: "border-box",
+    transition: "border-color 0.2s",
+  };
+
   return (
     <div style={{ minHeight: "100vh", position: "relative", overflowX: "hidden" }}>
       <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }} />
@@ -107,38 +133,31 @@ export default function LoginPage() {
           }}>⟁</div>
           <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, letterSpacing: "-0.02em" }}>Sutra Hosting</span>
         </div>
-        <a
-          href="https://sutra-hosting.onrender.com/auth/discord"
+        <button
+          onClick={() => setShowForm(true)}
           style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
             padding: "10px 20px", borderRadius: 12,
-            background: "#5865F2", color: "#fff",
-            fontWeight: 600, fontSize: 14, textDecoration: "none",
-            boxShadow: "0 4px 16px rgba(88,101,242,0.4)",
-            transition: "all 0.2s"
+            background: "#5865F2", color: "#fff", border: "none",
+            fontWeight: 600, fontSize: 14, cursor: "pointer",
+            boxShadow: "0 4px 16px rgba(88,101,242,0.4)", transition: "all 0.2s"
           }}
           onMouseEnter={e => { e.target.style.background = "#6872f5"; e.target.style.transform = "translateY(-1px)"; }}
           onMouseLeave={e => { e.target.style.background = "#5865F2"; e.target.style.transform = ""; }}
         >
-          <DiscordIcon /> Login
-        </a>
+          Sign In
+        </button>
       </header>
 
       {/* Hero */}
       <main style={{ position: "relative", zIndex: 2, maxWidth: 1100, margin: "0 auto", padding: "60px 40px" }}>
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          style={{ textAlign: "center", marginBottom: 80 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
+          style={{ textAlign: "center", marginBottom: 80 }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 8,
             padding: "6px 16px", borderRadius: 100,
             background: "rgba(88,101,242,0.1)", border: "1px solid rgba(88,101,242,0.25)",
             color: "#a5b4fc", fontSize: 12, fontWeight: 600,
-            letterSpacing: "0.06em", textTransform: "uppercase",
-            marginBottom: 24
+            letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 24
           }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#5865F2", display: "inline-block", animation: "pulse-glow 2s infinite" }} />
             Discord Bot Hosting Platform
@@ -148,33 +167,43 @@ export default function LoginPage() {
             fontFamily: "Syne", fontSize: "clamp(40px, 7vw, 80px)",
             fontWeight: 800, lineHeight: 1, marginBottom: 24,
             background: "linear-gradient(135deg, #fff 40%, #a5b4fc)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-            backgroundClip: "text"
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text"
           }}>
             Host your bots.<br />Own your uptime.
           </h1>
 
           <p style={{ fontSize: "clamp(15px, 2vw, 18px)", color: "var(--text2)", maxWidth: 520, margin: "0 auto 40px", lineHeight: 1.7 }}>
-            Sutra Hosting gives you a reliable, fast home for your Discord bots — 
+            Sutra Hosting gives you a reliable, fast home for your Discord bots —
             free tier included, no credit card required.
           </p>
 
-          <a
-            href="https://sutra-hosting.onrender.com/auth/discord"
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 10,
-              padding: "16px 36px", borderRadius: 16,
-              background: "#5865F2", color: "#fff",
-              fontWeight: 700, fontSize: 16, textDecoration: "none",
-              boxShadow: "0 8px 32px rgba(88,101,242,0.45)",
-              transition: "all 0.25s"
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(88,101,242,0.6)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 8px 32px rgba(88,101,242,0.45)"; }}
-          >
-            <DiscordIcon size={22} />
-            Continue with Discord
-          </a>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={() => { setMode("register"); setShowForm(true); }}
+              style={{
+                padding: "16px 36px", borderRadius: 16, border: "none",
+                background: "#5865F2", color: "#fff", fontWeight: 700, fontSize: 16,
+                cursor: "pointer", boxShadow: "0 8px 32px rgba(88,101,242,0.45)", transition: "all 0.25s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(88,101,242,0.6)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 8px 32px rgba(88,101,242,0.45)"; }}
+            >
+              Get Started Free
+            </button>
+            <button
+              onClick={() => { setMode("login"); setShowForm(true); }}
+              style={{
+                padding: "16px 36px", borderRadius: 16,
+                background: "rgba(255,255,255,0.06)", color: "#fff",
+                border: "1px solid var(--border)", fontWeight: 600, fontSize: 16,
+                cursor: "pointer", transition: "all 0.25s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.transform = ""; }}
+            >
+              Sign In
+            </button>
+          </div>
 
           <p style={{ marginTop: 14, fontSize: 12, color: "var(--text3)" }}>
             Free forever · No credit card needed · Up in 30 seconds
@@ -182,22 +211,12 @@ export default function LoginPage() {
         </motion.div>
 
         {/* Features */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 80 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 80 }}>
           {FEATURES.map((f, i) => (
-            <div key={i} style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 20, padding: "20px 22px",
-              transition: "all 0.25s"
-            }}
+            <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 20, padding: "20px 22px", transition: "all 0.25s" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(88,101,242,0.3)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = ""; }}
-            >
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = ""; }}>
               <div style={{ fontSize: 28, marginBottom: 10 }}>{f.icon}</div>
               <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{f.title}</div>
               <div style={{ fontSize: 13, color: "var(--text2)" }}>{f.desc}</div>
@@ -205,27 +224,19 @@ export default function LoginPage() {
           ))}
         </motion.div>
 
-        {/* Plans preview */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.5 }}
-        >
+        {/* Plans */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35, duration: 0.5 }}>
           <h2 style={{ fontFamily: "Syne", fontSize: 28, fontWeight: 800, textAlign: "center", marginBottom: 8 }}>Simple pricing</h2>
           <p style={{ textAlign: "center", color: "var(--text2)", fontSize: 14, marginBottom: 32 }}>Start free. Upgrade when you need more.</p>
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
             {PLANS_PREVIEW.map((p, i) => (
               <div key={i} style={{
                 background: p.popular ? "rgba(88,101,242,0.08)" : "var(--surface)",
                 border: `1px solid ${p.popular ? "rgba(88,101,242,0.35)" : "var(--border)"}`,
-                borderRadius: 20, padding: "22px",
-                position: "relative",
-                transition: "all 0.25s"
+                borderRadius: 20, padding: "22px", position: "relative", transition: "all 0.25s"
               }}
                 onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
-              >
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; }}>
                 {p.popular && (
                   <div style={{
                     position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
@@ -248,14 +259,140 @@ export default function LoginPage() {
       <footer style={{ position: "relative", zIndex: 2, textAlign: "center", padding: "40px", color: "var(--text3)", fontSize: 12 }}>
         © 2025 Sutra Hosting · Made with ⟁
       </footer>
-    </div>
-  );
-}
 
-function DiscordIcon({ size = 18 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 71 55" fill="currentColor">
-      <path d="M60.1 4.9A58.6 58.6 0 0 0 45.6.9a.2.2 0 0 0-.2.1c-.6 1.1-1.3 2.6-1.8 3.7a54.1 54.1 0 0 0-16.2 0c-.5-1.2-1.2-2.6-1.8-3.7a.2.2 0 0 0-.2-.1A58.4 58.4 0 0 0 11 4.9a.2.2 0 0 0-.1.1C1.6 19.1-.9 32.8.3 46.4c0 .1.1.2.2.2a59 59 0 0 0 17.7 9 .2.2 0 0 0 .2-.1c1.4-1.9 2.6-3.9 3.7-5.9.1-.1 0-.3-.2-.3a38.8 38.8 0 0 1-5.5-2.6c-.2-.1-.2-.3 0-.4l1.1-.9c.1-.1.2-.1.3 0 11.6 5.3 24.1 5.3 35.5 0 .1 0 .2 0 .3.1l1.1.9c.2.1.2.3 0 .4a36.2 36.2 0 0 1-5.5 2.6c-.2.1-.2.2-.1.3 1.1 2 2.3 4 3.7 5.9.1.1.2.1.3.1a58.8 58.8 0 0 0 17.7-9c.1-.1.2-.1.2-.2 1.4-15.6-2.4-29.2-10.1-41.3a.2.2 0 0 0-.1-.1zM23.7 38.2c-3.5 0-6.4-3.2-6.4-7.1s2.9-7.1 6.4-7.1 6.5 3.2 6.4 7.1c0 3.9-2.9 7.1-6.4 7.1zm23.7 0c-3.5 0-6.4-3.2-6.4-7.1s2.9-7.1 6.4-7.1 6.4 3.2 6.4 7.1c0 3.9-2.8 7.1-6.4 7.1z"/>
-    </svg>
+      {/* Auth Modal */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowForm(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 100,
+              background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: "var(--bg)", border: "1px solid var(--border)",
+                borderRadius: 24, padding: "36px 32px", width: "100%", maxWidth: 400,
+                boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
+              }}
+            >
+              {/* Logo */}
+              <div style={{ textAlign: "center", marginBottom: 28 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 14,
+                  background: "linear-gradient(135deg, #5865F2, #7289da)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 24, margin: "0 auto 12px",
+                  boxShadow: "0 4px 20px rgba(88,101,242,0.4)"
+                }}>⟁</div>
+                <h2 style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, margin: 0 }}>
+                  {mode === "login" ? "Welcome back" : "Create account"}
+                </h2>
+                <p style={{ color: "var(--text3)", fontSize: 13, marginTop: 4 }}>
+                  {mode === "login" ? "Sign in to Sutra Hosting" : "Start hosting for free"}
+                </p>
+              </div>
+
+              {/* Tab toggle */}
+              <div style={{
+                display: "flex", background: "rgba(255,255,255,0.04)",
+                borderRadius: 10, padding: 3, marginBottom: 24,
+              }}>
+                {["login", "register"].map(m => (
+                  <button key={m} onClick={() => setMode(m)} style={{
+                    flex: 1, padding: "8px", borderRadius: 8, border: "none",
+                    background: mode === m ? "rgba(88,101,242,0.3)" : "transparent",
+                    color: mode === m ? "#fff" : "var(--text3)",
+                    fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.2s"
+                  }}>
+                    {m === "login" ? "Sign In" : "Register"}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, display: "block", marginBottom: 6 }}>USERNAME</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    placeholder="your_username"
+                    required
+                    autoFocus
+                    style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = "#5865F2"}
+                    onBlur={e => e.target.style.borderColor = "var(--border)"}
+                  />
+                </div>
+
+                {mode === "register" && (
+                  <div>
+                    <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, display: "block", marginBottom: 6 }}>EMAIL <span style={{ color: "var(--text3)", fontWeight: 400 }}>(optional)</span></label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      style={inputStyle}
+                      onFocus={e => e.target.style.borderColor = "#5865F2"}
+                      onBlur={e => e.target.style.borderColor = "var(--border)"}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, display: "block", marginBottom: 6 }}>PASSWORD</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder={mode === "register" ? "At least 6 characters" : "Your password"}
+                    required
+                    style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = "#5865F2"}
+                    onBlur={e => e.target.style.borderColor = "var(--border)"}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    marginTop: 4, padding: "13px", borderRadius: 12, border: "none",
+                    background: loading ? "rgba(88,101,242,0.5)" : "#5865F2",
+                    color: "#fff", fontWeight: 700, fontSize: 15,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    transition: "all 0.2s",
+                    boxShadow: loading ? "none" : "0 4px 20px rgba(88,101,242,0.4)",
+                  }}
+                >
+                  {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
+                </button>
+              </form>
+
+              <p style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "var(--text3)" }}>
+                {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+                <button onClick={() => setMode(mode === "login" ? "register" : "login")}
+                  style={{ background: "none", border: "none", color: "#a5b4fc", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>
+                  {mode === "login" ? "Register" : "Sign In"}
+                </button>
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
