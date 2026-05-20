@@ -78,6 +78,7 @@ const migrations = [
   "ALTER TABLE bots ADD COLUMN code TEXT",
   "ALTER TABLE bots ADD COLUMN last_started INTEGER",
   "ALTER TABLE bots ADD COLUMN last_log TEXT",
+  "ALTER TABLE bots ADD COLUMN archived INTEGER DEFAULT 0",
 ];
 for (const m of migrations) {
   try { db.exec(m); } catch (_) {}
@@ -448,6 +449,23 @@ app.post("/bots/:id/restart", requireAuth, async (req, res) => {
   const freshBot = db.prepare("SELECT * FROM bots WHERE id = ?").get(id);
   const result = await startBotProcess(freshBot);
   if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ success: true, bot: db.prepare("SELECT * FROM bots WHERE id = ?").get(id) });
+});
+
+app.post("/bots/:id/archive", requireAuth, (req, res) => {
+  const { id } = req.params;
+  const bot = db.prepare("SELECT * FROM bots WHERE id = ? AND user_id = ?").get(id, req.userId);
+  if (!bot) return res.status(404).json({ error: "Bot not found" });
+  if (runningProcesses.has(id)) stopBotProcess(id, "bot archived");
+  db.prepare("UPDATE bots SET archived=1, status='stopped', updated_at=strftime('%s','now') WHERE id=?").run(id);
+  res.json({ success: true, bot: db.prepare("SELECT * FROM bots WHERE id = ?").get(id) });
+});
+
+app.post("/bots/:id/unarchive", requireAuth, (req, res) => {
+  const { id } = req.params;
+  const bot = db.prepare("SELECT * FROM bots WHERE id = ? AND user_id = ?").get(id, req.userId);
+  if (!bot) return res.status(404).json({ error: "Bot not found" });
+  db.prepare("UPDATE bots SET archived=0, updated_at=strftime('%s','now') WHERE id=?").run(id);
   res.json({ success: true, bot: db.prepare("SELECT * FROM bots WHERE id = ?").get(id) });
 });
 
