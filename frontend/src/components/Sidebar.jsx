@@ -48,7 +48,7 @@ export default function Sidebar() {
             ⟁
           </div>
           <div>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em" }}>EnderCloud</div>
+            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em" }}>Sutra Hosting</div>
             <div style={{ fontSize: 10, color: "var(--text3)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Bot Hosting</div>
           </div>
         </div>
@@ -70,22 +70,7 @@ export default function Sidebar() {
           </button>
         ))}
 
-        {isOwner && (
-          <>
-            <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />
-            <div style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", padding: "0 14px", marginBottom: 6 }}>
-              Owner
-            </div>
-            <button
-              className={`nav-item ${location.pathname === "/admin" ? "active" : ""}`}
-              onClick={() => navigate("/admin")}
-              style={{ borderColor: "rgba(251,191,36,0.2)", color: location.pathname === "/admin" ? "#fbbf24" : "" }}
-            >
-              <span style={{ fontSize: 16 }}>👑</span>
-              Admin Panel
-            </button>
-          </>
-        )}
+
       </nav>
 
       {/* User info */}
