@@ -5,13 +5,14 @@ import { useAuth } from "../App.jsx";
 import { api, getAvatarUrl, getCountry, timeAgo } from "../api.js";
 
 export default function DashboardPage() {
-  const { user, isOwner } = useAuth();
+  const { user, isOwner, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [bots, setBots] = useState([]);
   const [plans, setPlans] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    refreshUser();
     Promise.all([api.bots(), api.plans()]).then(([b, p]) => {
       setBots(b);
       setPlans(p);
