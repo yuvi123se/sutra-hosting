@@ -20,7 +20,7 @@ export const api = {
   // Auth
   login: (username, password) => req("POST", "auth/login", { username, password }),
   register: (username, password, email) => req("POST", "auth/register", { username, password, email }),
-  me: () => req("GET", "auth/me"),
+  me: () => req("GET", `auth/me?t=${Date.now()}`),
   logout: () => req("POST", "auth/logout"),
 
   // Plans
