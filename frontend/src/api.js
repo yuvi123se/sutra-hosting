@@ -4,6 +4,7 @@ export function getToken() { return localStorage.getItem("sutra_token"); }
 export function setToken(token) { localStorage.setItem("sutra_token", token); }
 export function clearToken() { localStorage.removeItem("sutra_token"); }
 
+// Regular JSON requests with a 30s timeout
 async function req(method, path, body) {
   const token = getToken();
   const isFormData = body instanceof FormData;
@@ -11,17 +12,54 @@ async function req(method, path, body) {
   if (token) opts.headers["Authorization"] = `Bearer ${token}`;
   if (body !== undefined) {
     if (isFormData) {
-      opts.body = body; // let browser set Content-Type with boundary
+      opts.body = body;
     } else {
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(body);
     }
   }
-  const res = await fetch(`${BASE}/${path}`, opts);
-  if (res.status === 204) return {};
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  opts.signal = controller.signal;
+
+  try {
+    const res = await fetch(`${BASE}/${path}`, opts);
+    clearTimeout(timer);
+    if (res.status === 204) return {};
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    return data;
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error("Request timed out. The server may be waking up — try again in a moment.");
+    throw e;
+  }
+}
+
+// Multipart upload with progress callback and 5 min timeout
+export function uploadWithProgress(path, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE}/${path}`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.timeout = 5 * 60 * 1000;
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else reject(new Error(data.error || `Upload failed (${xhr.status})`));
+      } catch { reject(new Error("Invalid response from server")); }
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload. Check your connection."));
+    xhr.ontimeout = () => reject(new Error("Upload timed out. Try a smaller archive or upgrade your plan."));
+    xhr.send(formData);
+  });
 }
 
 export const api = {
