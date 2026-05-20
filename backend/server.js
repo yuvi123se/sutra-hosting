@@ -20,7 +20,7 @@ const OWNER_USERNAME = process.env.OWNER_USERNAME || "admin";
 const JWT_SECRET = process.env.SESSION_SECRET || "sutra_secret_dev";
 
 // ─── Database Setup ────────────────────────────────────────────────────────────
-const DB_PATH = path.join(__dirname, "sutra-hosting.db");
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, "sutra-hosting.db");
 const db = new Database(DB_PATH);
 
 db.exec(`
