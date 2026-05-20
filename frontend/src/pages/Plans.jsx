@@ -12,12 +12,13 @@ const PLAN_META = {
 };
 
 export default function PlansPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const toast = useToast();
   const [plans, setPlans] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    refreshUser(); // always pull fresh plan from server
     api.plans().then(p => { setPlans(p); setLoading(false); });
   }, []);
 
